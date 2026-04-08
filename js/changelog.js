@@ -4,7 +4,25 @@
  */
 const Changelog = [
     {
-        date: '08/04/2026',
+        date: '08/04/2026 (sesion 2)',
+        items: [
+            { type: 'new', text: 'Grafico de evolucion semanal con Chart.js: lineas por empleado o total tienda' },
+            { type: 'new', text: 'Click en fila de la tabla para ver su grafico individual (+ total como referencia en linea discontinua)' },
+            { type: 'new', text: 'Fila TOTAL tambien seleccionable para grafico' },
+            { type: 'new', text: 'Selector Top N (Top 3, 5, 10, Todos) en filtros de evolucion: filtra tabla y grafico' },
+            { type: 'new', text: 'Tooltip info (i) en el grafico explicando numerador/denominador de cada metrica' },
+            { type: 'new', text: 'Panel unico de Moviles: eliminado resumen redundante, solo evolucion semanal con todos los filtros' },
+            { type: 'new', text: 'Rango de semanas persistido en IndexedDB (se recuerda entre sesiones y en backups)' },
+            { type: 'new', text: 'Explorador de datos movido dentro de Importar CSV como boton "Verificar datos" desplegable' },
+            { type: 'new', text: 'Home: resumen muestra "Todo" por defecto al cargar' },
+            { type: 'new', text: 'Boton "Novedades" en topbar con modal de changelog' },
+            { type: 'fix', text: 'Chart.js: URL corregida a cdn.jsdelivr.net (version 4.4.4, la anterior daba 404)' },
+            { type: 'fix', text: 'Error btn-drive-auth eliminado (rompia toda la inicializacion al estar sombreado Drive)' },
+            { type: 'fix', text: 'Variable allStaff declarada antes de usarse en renderEvoChart (error de referencia)' },
+        ]
+    },
+    {
+        date: '08/04/2026 (sesion 1)',
         items: [
             { type: 'new', text: 'Estructura base del proyecto: HTML/CSS/JS, IndexedDB (Dexie.js), Papa Parse' },
             { type: 'new', text: 'Home profesional con sidebar, topbar, panel resumen con filtros de periodo y tienda' },
@@ -17,17 +35,12 @@ const Changelog = [
             { type: 'new', text: 'Nombre de exports con fecha y hora: kpitool_export_2026-04-08_1109.json.gz' },
             { type: 'new', text: 'Restablecer herramienta con doble confirmacion y recomendacion de backup previo' },
             { type: 'new', text: 'Calendario de negocio: semanas sabado-viernes, semana 1 = 27/12/2025, configurable' },
-            { type: 'new', text: 'KPI Moviles: seccion dedicada con resumen por empleado/global y evolucion semanal' },
-            { type: 'new', text: 'Resumen Moviles: 8 columnas sortables (moviles, total, services, %gel, basics, %basics, %combo)' },
-            { type: 'new', text: 'Porcentajes con desglose de unidades (ej: "33% 4/12") y colores: >40% verde, 30-40% amarillo, <30% rojo' },
-            { type: 'new', text: 'Selector de vista global/por empleado y selector de semana individual' },
-            { type: 'new', text: 'Evolucion semanal: rango de semanas, metrica seleccionable, scope staff/total, columnas sortables' },
+            { type: 'new', text: 'KPI Moviles con porcentajes, desglose de unidades y colores (>40% verde, 30-40% amarillo, <30% rojo)' },
             { type: 'new', text: '% Combo: indicador de venta conjunta de geles + basics por movil' },
             { type: 'fix', text: 'Calculo de semanas con Date.UTC para evitar desfase por cambio de hora (DST)' },
             { type: 'fix', text: 'Fechas siempre en DD/MM/AAAA, input de texto en vez de date picker nativo' },
             { type: 'fix', text: 'Botones de confirmar/cancelar importacion visibles arriba sin necesidad de scroll' },
             { type: 'new', text: 'Google Drive sombreado como "proximamente"' },
-            { type: 'new', text: 'Explorador de datos con busqueda, filtro por tipo y paginacion' },
         ]
     }
 ];

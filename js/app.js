@@ -90,34 +90,28 @@ const App = (() => {
             });
         });
 
-        // Data explorer
+        // Data explorer toggle
+        document.getElementById('btn-toggle-explorer').addEventListener('click', toggleDataExplorer);
         document.getElementById('data-search').addEventListener('input', debounce(loadDataExplorer, 300));
         document.getElementById('data-filter-type').addEventListener('change', loadDataExplorer);
         document.getElementById('data-pagination').addEventListener('click', (e) => {
             if (e.target.dataset.page) loadDataExplorer(parseInt(e.target.dataset.page));
         });
-        document.getElementById('btn-export').addEventListener('click', exportData);
 
         // Home summary filters
         document.getElementById('home-summary-period').addEventListener('change', refreshHomeSummary);
         document.getElementById('home-summary-store').addEventListener('change', refreshHomeSummary);
 
-        // KPI Mobiles filters
-        document.getElementById('kpi-panel-period').addEventListener('change', onKpiPeriodChange);
+        // KPI Mobiles: single set of filters
         document.getElementById('kpi-panel-store').addEventListener('change', refreshKPIMobiles);
-        document.getElementById('kpi-panel-scope').addEventListener('change', refreshKPIMobiles);
-        document.getElementById('kpi-panel-week-pick').addEventListener('change', refreshKPIMobiles);
-
-        // KPI table sorting
-        document.querySelectorAll('#kpi-panel-table th.sortable').forEach(th => {
-            th.addEventListener('click', () => sortKPITable(th.dataset.col));
-        });
-
-        // Evolution controls
         document.getElementById('evo-week-from').addEventListener('change', refreshEvolution);
         document.getElementById('evo-week-to').addEventListener('change', refreshEvolution);
         document.getElementById('evo-metric').addEventListener('change', refreshEvolution);
         document.getElementById('evo-scope').addEventListener('change', refreshEvolution);
+
+        // Top N + chart toggle
+        document.getElementById('evo-top-n').addEventListener('change', refreshEvolution);
+        document.getElementById('btn-toggle-chart').addEventListener('click', toggleEvoChart);
 
         // Changelog
         document.getElementById('btn-changelog').addEventListener('click', openChangelog);
@@ -131,7 +125,6 @@ const App = (() => {
 
         // Settings
         document.getElementById('btn-reset-tool').addEventListener('click', resetTool);
-        document.getElementById('btn-drive-auth').addEventListener('click', connectDrive);
         document.getElementById('btn-save-course-start').addEventListener('click', saveCourseStart);
     }
 
@@ -139,7 +132,6 @@ const App = (() => {
         switch (action) {
             case 'go-home': navigateTo('home'); break;
             case 'go-import': navigateTo('import'); break;
-            case 'go-data': navigateTo('data'); break;
             case 'go-settings': navigateTo('settings'); break;
             case 'go-kpi-mobiles': navigateTo('kpi-mobiles'); break;
             case 'export-json': exportData(); break;
@@ -161,7 +153,6 @@ const App = (() => {
 
         if (sectionId === 'home') refreshHome();
         if (sectionId === 'import') renderImportHistory();
-        if (sectionId === 'data') loadDataExplorer();
         if (sectionId === 'settings') loadSettings();
         if (sectionId === 'kpi-mobiles') refreshKPIMobiles();
     }
@@ -190,7 +181,6 @@ const App = (() => {
     async function refreshHome() {
         const count = await Database.getRecordCount();
         document.getElementById('db-status-badge').textContent = `DB: ${count.toLocaleString()}`;
-        document.getElementById('home-record-count').textContent = `${count.toLocaleString()} registros`;
 
         // Last import
         const imports = await Database.getImportHistory();
@@ -303,158 +293,26 @@ const App = (() => {
     // ============================
     // KPI PANEL (sortable, multi-KPI ready)
     // ============================
-    let kpiPanelData = [];       // current rows for sorting
-    let kpiSortCol = 'mobiles';  // default sort column
-    let kpiSortDir = 'desc';     // 'asc' or 'desc'
-
-    function onKpiPeriodChange() {
-        const period = document.getElementById('kpi-panel-period').value;
-        const weekPick = document.getElementById('kpi-panel-week-pick');
-
-        if (period === 'week-pick') {
-            // Populate week picker with available weeks
-            const today = new Date().toISOString().substring(0, 10);
-            const currentWeek = KPIEngine.helpers.businessWeek(today);
-            weekPick.innerHTML = '';
-            for (let w = currentWeek; w >= 1; w--) {
-                weekPick.innerHTML += `<option value="${w}">W${w}</option>`;
-            }
-            weekPick.style.display = '';
-        } else {
-            weekPick.style.display = 'none';
-        }
-        refreshKPIMobiles();
-    }
-
     async function refreshKPIMobiles() {
-        // Populate store filter
         const stores = await Database.getDistinctValues('store');
         populateStoreSelect('kpi-panel-store', stores);
 
-        // Set sensible week range defaults for evolution
         const today = new Date().toISOString().substring(0, 10);
         const currentWeek = KPIEngine.helpers.businessWeek(today);
         const fromEl = document.getElementById('evo-week-from');
         const toEl = document.getElementById('evo-week-to');
-        if (parseInt(toEl.value) < 2) {
+
+        const savedFrom = await Database.getSetting('evoWeekFrom');
+        const savedTo = await Database.getSetting('evoWeekTo');
+        if (savedFrom && savedTo) {
+            fromEl.value = savedFrom;
+            toEl.value = savedTo;
+        } else if (parseInt(toEl.value) < 2) {
             fromEl.value = Math.max(1, currentWeek - 3);
             toEl.value = currentWeek;
         }
 
-        const periodValue = document.getElementById('kpi-panel-period').value;
-        const store = document.getElementById('kpi-panel-store').value;
-        const scope = document.getElementById('kpi-panel-scope').value;
-
-        // Handle week-pick: override period with specific week
-        let range;
-        if (periodValue === 'week-pick') {
-            const wk = parseInt(document.getElementById('kpi-panel-week-pick').value) || currentWeek;
-            const courseStart = KPIEngine.getCourseStart();
-            const cs = courseStart.split('-');
-            const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
-            const fromMs = startMs + (wk - 1) * 7 * 86400000;
-            const toMs = startMs + wk * 7 * 86400000 - 86400000;
-            const fromDate = new Date(fromMs).toISOString().substring(0, 10);
-            const toDate = new Date(toMs).toISOString().substring(0, 10);
-            range = {
-                dateFrom: fromDate,
-                dateTo: toDate,
-                label: `Semana ${wk} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
-            };
-        } else {
-            range = getPeriodDateRange(periodValue);
-        }
-
-        // Update title and header based on scope
-        const titleEl = document.getElementById('kpi-summary-title');
-        const theadEl = document.getElementById('kpi-panel-thead');
-        const firstCol = scope === 'total' ? 'Tienda' : 'Empleado';
-        titleEl.textContent = scope === 'total' ? 'Resumen global' : 'Resumen por empleado';
-        theadEl.innerHTML = `<tr>
-            <th class="sortable" data-col="name">${firstCol}</th>
-            <th class="sortable" data-col="mobiles">Moviles</th>
-            <th class="sortable" data-col="mobilesTotal">Total</th>
-            <th class="sortable" data-col="services">Services</th>
-            <th class="sortable" data-col="pctServices">% Gel</th>
-            <th class="sortable" data-col="basics">Basics</th>
-            <th class="sortable" data-col="pctBasics">% Basics</th>
-            <th class="sortable" data-col="pctCombo">% Combo</th>
-        </tr>`;
-        // Re-bind sort on new headers
-        theadEl.querySelectorAll('th.sortable').forEach(th => {
-            th.addEventListener('click', () => sortKPITable(th.dataset.col));
-        });
-
-        // Week range label
-        document.getElementById('kpi-panel-week-range').textContent = range.label;
-
-        const allData = await Database.getOperationsForKPI({});
-
-        // Base filter: date range + store
-        let baseFiltered = allData;
-        if (range.dateFrom) {
-            baseFiltered = baseFiltered.filter(r => r.date >= range.dateFrom && r.date <= range.dateTo);
-        }
-        if (store && store !== 'all') {
-            baseFiltered = baseFiltered.filter(r => r.store === store);
-        }
-
-        const sales = baseFiltered.filter(r => r.type === 'sale');
-
-        // Group by key (staff or store name for global)
-        const byKey = {};
-        for (const r of sales) {
-            const name = scope === 'total' ? (r.store || 'N/A') : (r.staff || 'N/A');
-            if (!byKey[name]) byKey[name] = { name, mobiles: 0, mobilesTotal: 0, services: 0, basics: 0 };
-
-            const catLower = (r.category || '').toLowerCase();
-            const qty = r.quantity || 0;
-
-            if (catLower.includes('moviles')) {
-                byKey[name].mobiles += qty;
-                byKey[name].mobilesTotal += (r.total || 0);
-            }
-            if (catLower.includes('services')) {
-                byKey[name].services += qty;
-            }
-            if (catLower.includes('basics')) {
-                byKey[name].basics += qty;
-            }
-        }
-
-        kpiPanelData = Object.values(byKey)
-            .filter(d => d.mobiles > 0 || d.services > 0 || d.basics > 0)
-            .map(d => {
-                const combo = d.services + d.basics;
-                return {
-                    ...d,
-                    pctServices: d.mobiles > 0 ? Math.round((d.services / d.mobiles) * 100) : 0,
-                    pctBasics: d.mobiles > 0 ? Math.round((d.basics / d.mobiles) * 100) : 0,
-                    pctCombo: d.mobiles > 0 ? Math.round((combo / d.mobiles) * 100) : 0
-                };
-            });
-
-        renderKPITable();
         refreshEvolution();
-    }
-
-    function sortKPITable(col) {
-        if (kpiSortCol === col) {
-            kpiSortDir = kpiSortDir === 'desc' ? 'asc' : 'desc';
-        } else {
-            kpiSortCol = col;
-            kpiSortDir = col === 'name' ? 'asc' : 'desc';
-        }
-
-        // Update header classes
-        document.querySelectorAll('#kpi-panel-table th.sortable').forEach(th => {
-            th.classList.remove('sort-asc', 'sort-desc');
-            if (th.dataset.col === kpiSortCol) {
-                th.classList.add(kpiSortDir === 'asc' ? 'sort-asc' : 'sort-desc');
-            }
-        });
-
-        renderKPITable();
     }
 
     function formatPct(val) {
@@ -462,66 +320,11 @@ const App = (() => {
         return `<span class="pct-cell ${cls}">${val}%</span>`;
     }
 
-    /** Format percentage with unit breakdown: "33% <small>(4/12)</small>" */
     function formatPctDetail(numerator, denominator) {
         if (denominator <= 0) return '--';
         const pct = Math.round((numerator / denominator) * 100);
         const cls = pct > 40 ? 'pct-good' : pct >= 30 ? 'pct-ok' : 'pct-low';
         return `<span class="pct-cell ${cls}">${pct}%</span> <small class="pct-units">${numerator}/${denominator}</small>`;
-    }
-
-    function renderKPITable() {
-        const tbody = document.getElementById('kpi-panel-tbody');
-        const tfoot = document.getElementById('kpi-panel-tfoot');
-
-        if (kpiPanelData.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" class="empty-msg">Sin datos para este periodo.</td></tr>';
-            tfoot.innerHTML = '';
-            return;
-        }
-
-        const sorted = [...kpiPanelData].sort((a, b) => {
-            let va = a[kpiSortCol], vb = b[kpiSortCol];
-            if (typeof va === 'string') {
-                va = va.toLowerCase(); vb = vb.toLowerCase();
-                return kpiSortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-            }
-            return kpiSortDir === 'asc' ? va - vb : vb - va;
-        });
-
-        const totals = { mobiles: 0, mobilesTotal: 0, services: 0, basics: 0 };
-        for (const d of sorted) {
-            totals.mobiles += d.mobiles;
-            totals.mobilesTotal += d.mobilesTotal;
-            totals.services += d.services;
-            totals.basics += d.basics;
-        }
-
-        tbody.innerHTML = sorted.map(d => `
-            <tr>
-                <td>${escapeHtml(d.name)}</td>
-                <td><strong>${d.mobiles}</strong></td>
-                <td>${formatCurrency(d.mobilesTotal)}</td>
-                <td>${d.services}</td>
-                <td>${formatPctDetail(d.services, d.mobiles)}</td>
-                <td>${d.basics}</td>
-                <td>${formatPctDetail(d.basics, d.mobiles)}</td>
-                <td>${formatPctDetail(d.services + d.basics, d.mobiles)}</td>
-            </tr>
-        `).join('');
-
-        tfoot.innerHTML = `
-            <tr>
-                <td>TOTAL</td>
-                <td><strong>${totals.mobiles}</strong></td>
-                <td>${formatCurrency(totals.mobilesTotal)}</td>
-                <td><strong>${totals.services}</strong></td>
-                <td>${formatPctDetail(totals.services, totals.mobiles)}</td>
-                <td><strong>${totals.basics}</strong></td>
-                <td>${formatPctDetail(totals.basics, totals.mobiles)}</td>
-                <td>${formatPctDetail(totals.services + totals.basics, totals.mobiles)}</td>
-            </tr>
-        `;
     }
 
     // ============================
@@ -532,8 +335,9 @@ const App = (() => {
         weeks: [],
         scope: 'staff',
         metric: 'mobiles',
-        sortCol: null,   // null = alphabetical, or week number, or 'total'
-        sortDir: 'desc'  // first click always desc
+        sortCol: null,
+        sortDir: 'desc',
+        selectedStaff: null  // clicked row for chart highlight
     };
 
     async function refreshEvolution() {
@@ -542,6 +346,21 @@ const App = (() => {
         evoState.metric = document.getElementById('evo-metric').value;
         evoState.scope = document.getElementById('evo-scope').value;
         const store = document.getElementById('kpi-panel-store').value;
+
+        // Persist week range
+        await Database.setSetting('evoWeekFrom', weekFrom);
+        await Database.setSetting('evoWeekTo', weekTo);
+
+        // Week range label
+        const courseStart = KPIEngine.getCourseStart();
+        const cs = courseStart.split('-');
+        const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
+        const fromDate = new Date(startMs + (weekFrom - 1) * 7 * 86400000).toISOString().substring(0, 10);
+        const toDate = new Date(startMs + weekTo * 7 * 86400000 - 86400000).toISOString().substring(0, 10);
+        document.getElementById('kpi-panel-week-range').textContent =
+            weekFrom === weekTo
+                ? `Semana ${weekFrom} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
+                : `Semanas ${weekFrom}-${weekTo} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`;
 
         // Reset sort on data change
         evoState.sortCol = null;
@@ -591,6 +410,10 @@ const App = (() => {
             evoState.sortDir = 'desc';
         }
         renderEvolution();
+        // Re-rank chart if visible
+        if (!document.getElementById('evo-chart-section').classList.contains('collapsed')) {
+            renderEvoChart();
+        }
     }
 
     function evoSortValue(name, col, metric, weeks) {
@@ -675,21 +498,26 @@ const App = (() => {
             return;
         }
 
-        // Sort
-        if (sortCol !== null) {
-            staffNames.sort((a, b) => {
-                const va = evoSortValue(a, sortCol, metric, weeks);
-                const vb = evoSortValue(b, sortCol, metric, weeks);
-                if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
-                return sortDir === 'asc' ? va - vb : vb - va;
-            });
-        } else {
-            staffNames.sort();
+        // Sort: default by total desc, or by clicked column
+        const rankCol = sortCol || 'total';
+        const rankDir = sortCol ? sortDir : 'desc';
+        staffNames.sort((a, b) => {
+            const va = evoSortValue(a, rankCol, metric, weeks);
+            const vb = evoSortValue(b, rankCol, metric, weeks);
+            if (typeof va === 'string') return rankDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+            return rankDir === 'asc' ? va - vb : vb - va;
+        });
+
+        // Apply top-n filter
+        const topNVal = document.getElementById('evo-top-n').value;
+        if (topNVal !== 'all') {
+            staffNames = staffNames.slice(0, parseInt(topNVal));
         }
 
         tbody.innerHTML = staffNames.map(name => {
             const wd = staffWeekData[name];
-            return `<tr>
+            const selected = evoState.selectedStaff === name ? ' class="evo-row-selected"' : '';
+            return `<tr${selected} data-staff="${escapeHtml(name)}">
                 <td>${escapeHtml(name)}</td>
                 ${weeks.map(w => `<td>${evoCellValue(wd?.[w], metric)}</td>`).join('')}
                 <td><strong>${evoRowTotal(wd || {}, metric, weeks)}</strong></td>
@@ -706,7 +534,7 @@ const App = (() => {
                     colTotals[w].services += c.services; colTotals[w].basics += c.basics;
                 }
             }
-            tfoot.innerHTML = `<tr>
+            tfoot.innerHTML = `<tr data-staff="__TOTAL__">
                 <td>TOTAL</td>
                 ${weeks.map(w => `<td><strong>${evoCellValue(colTotals[w], metric)}</strong></td>`).join('')}
                 <td><strong>${evoRowTotal(colTotals, metric, weeks)}</strong></td>
@@ -714,6 +542,215 @@ const App = (() => {
         } else {
             tfoot.innerHTML = '';
         }
+
+        // Click any row (staff or total) to select for chart
+        function selectRow(name, tr) {
+            evoState.selectedStaff = evoState.selectedStaff === name ? null : name;
+            // Update highlight across both tbody and tfoot
+            const table = document.getElementById('evo-table');
+            table.querySelectorAll('tr').forEach(r => r.classList.remove('evo-row-selected'));
+            if (evoState.selectedStaff) tr.classList.add('evo-row-selected');
+            // Open chart if collapsed, then render
+            const section = document.getElementById('evo-chart-section');
+            if (section.classList.contains('collapsed')) {
+                section.classList.remove('collapsed');
+                requestAnimationFrame(() => requestAnimationFrame(() => {
+                    try { renderEvoChart(); } catch(e) { console.error('Chart error:', e); }
+                }));
+            } else {
+                try { renderEvoChart(); } catch(e) { console.error('Chart error:', e); }
+            }
+        }
+
+        document.querySelectorAll('#evo-table tr[data-staff]').forEach(tr => {
+            tr.style.cursor = 'pointer';
+            tr.addEventListener('click', () => selectRow(tr.dataset.staff, tr));
+        });
+
+        // Refresh chart if visible
+        if (!document.getElementById('evo-chart-section').classList.contains('collapsed')) {
+            renderEvoChart();
+        }
+    }
+
+    // ============================
+    // EVOLUTION CHART
+    // ============================
+    let evoChartInstance = null;
+
+    const CHART_METRIC_INFO = {
+        pctServices: 'Porcentaje de geles (Services)\nvendidos por movil.\n\nNumerador: lineas Services\nDenominador: lineas Moviles',
+        pctBasics: 'Porcentaje de CeX Basics\nvendidos por movil.\n\nNumerador: lineas Basics\nDenominador: lineas Moviles',
+        pctCombo: 'Porcentaje combinado de\ngeles + basics por movil.\n\nNumerador: Services + Basics\nDenominador: lineas Moviles',
+        mobiles: 'Unidades de moviles vendidos\n(lineas con categoria "Moviles")',
+        mobilesTotal: 'Importe total de moviles vendidos',
+        services: 'Unidades de Services vendidos\n(lineas con categoria "Services")',
+        basics: 'Unidades de CeX Basics vendidos\n(lineas con categoria "basics")'
+    };
+
+    function toggleEvoChart() {
+        const section = document.getElementById('evo-chart-section');
+        const isCollapsed = section.classList.contains('collapsed');
+        if (isCollapsed) {
+            section.classList.remove('collapsed');
+            // Double rAF: first to apply display change, second to let layout compute
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    try { renderEvoChart(); }
+                    catch (e) { console.error('Chart render error:', e); }
+                });
+            });
+        } else {
+            section.classList.add('collapsed');
+        }
+    }
+
+    function renderEvoChart() {
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js not loaded');
+            return;
+        }
+
+        const chartMetric = evoState.metric;
+        const { staffWeekData, weeks, scope } = evoState;
+
+        document.getElementById('evo-chart-info').title = CHART_METRIC_INFO[chartMetric] || '';
+
+        const canvas = document.getElementById('evo-chart');
+        if (!canvas) { console.error('Canvas not found'); return; }
+
+        if (evoChartInstance) {
+            evoChartInstance.destroy();
+            evoChartInstance = null;
+        }
+
+        const allStaff = Object.keys(staffWeekData);
+        if (weeks.length === 0 || allStaff.length === 0) return;
+
+        // Ensure canvas has dimensions
+        const container = canvas.parentElement;
+        if (container.offsetHeight === 0) {
+            console.warn('Chart container has no height, skipping render');
+            return;
+        }
+
+        const labels = weeks.map(w => `W${w}`);
+        const isPct = chartMetric.startsWith('pct');
+        const topNVal = document.getElementById('evo-top-n').value;
+        const showTotal = scope === 'total' || allStaff.length === 1;
+        const maxLines = topNVal === 'all' ? 999 : parseInt(topNVal) || 999;
+
+        const colors = [
+            '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
+            '#db2777', '#0891b2', '#65a30d', '#ea580c', '#6366f1',
+            '#be123c', '#0d9488', '#c026d3', '#ca8a04', '#475569'
+        ];
+
+        let datasets;
+
+        // If a row is selected, show that line (+ total as context if it's a staff)
+        const selected = evoState.selectedStaff;
+        if (selected === '__TOTAL__' || (showTotal && !selected)) {
+            // Show total line
+            const data = weeks.map(w => {
+                let m = 0, s = 0, b = 0, mt = 0;
+                for (const name of allStaff) {
+                    const c = staffWeekData[name]?.[w]; if (!c) continue;
+                    m += c.mobiles; s += c.services; b += c.basics; mt += c.mobilesTotal;
+                }
+                return evoChartValue({ mobiles: m, services: s, basics: b, mobilesTotal: mt }, chartMetric);
+            });
+            datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
+        } else if (selected && staffWeekData[selected] && !showTotal) {
+            const selData = weeks.map(w => evoChartValue(staffWeekData[selected]?.[w], chartMetric));
+            const totalData = weeks.map(w => {
+                let m = 0, s = 0, b = 0, mt = 0;
+                for (const name of allStaff) {
+                    const c = staffWeekData[name]?.[w]; if (!c) continue;
+                    m += c.mobiles; s += c.services; b += c.basics; mt += c.mobilesTotal;
+                }
+                return evoChartValue({ mobiles: m, services: s, basics: b, mobilesTotal: mt }, chartMetric);
+            });
+            datasets = [
+                { label: selected.split(' ').slice(0, 2).join(' '), data: selData, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 5, borderWidth: 3 },
+                { label: 'Total tienda', data: totalData, borderColor: '#94a3b8', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 1.5, borderDash: [4, 3] }
+            ];
+        } else if (showTotal) {
+            const data = weeks.map(w => {
+                let m = 0, s = 0, b = 0, mt = 0;
+                for (const name of allStaff) {
+                    const c = staffWeekData[name]?.[w]; if (!c) continue;
+                    m += c.mobiles; s += c.services; b += c.basics; mt += c.mobilesTotal;
+                }
+                return evoChartValue({ mobiles: m, services: s, basics: b, mobilesTotal: mt }, chartMetric);
+            });
+            datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
+        } else {
+            const rankCol = evoState.sortCol || 'total';
+            const ranked = allStaff
+                .map(name => ({ name, val: evoSortValue(name, rankCol, chartMetric, weeks) }))
+                .sort((a, b) => b.val - a.val)
+                .slice(0, maxLines);
+
+            datasets = ranked.map(({ name }, i) => ({
+                label: name.split(' ').slice(0, 2).join(' '),
+                data: weeks.map(w => evoChartValue(staffWeekData[name]?.[w], chartMetric)),
+                borderColor: colors[i % colors.length],
+                backgroundColor: colors[i % colors.length] + '15',
+                tension: 0.3,
+                pointRadius: 3,
+                borderWidth: 2
+            }));
+        }
+
+        evoChartInstance = new Chart(canvas, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        display: datasets.length > 1 && datasets.length <= 10,
+                        position: 'bottom',
+                        labels: { font: { size: 10 }, boxWidth: 12, padding: 8 }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(ctx) {
+                                const val = ctx.parsed.y;
+                                return `${ctx.dataset.label}: ${isPct ? val + '%' : val}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            font: { size: 10 },
+                            callback: val => isPct ? val + '%' : val
+                        },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    x: {
+                        ticks: { font: { size: 10 } },
+                        grid: { display: false }
+                    }
+                }
+            }
+        });
+    }
+
+    function evoChartValue(cellData, metricKey) {
+        if (!cellData) return 0;
+        const m = cellData.mobiles, s = cellData.services, b = cellData.basics;
+        if (metricKey === 'pctServices') return m > 0 ? Math.round((s / m) * 100) : 0;
+        if (metricKey === 'pctBasics') return m > 0 ? Math.round((b / m) * 100) : 0;
+        if (metricKey === 'pctCombo') return m > 0 ? Math.round(((s + b) / m) * 100) : 0;
+        if (metricKey === 'mobilesTotal') return cellData.mobilesTotal;
+        return cellData[metricKey] || 0;
     }
 
     // ============================
@@ -840,8 +877,22 @@ const App = (() => {
     }
 
     // ============================
-    // DATA EXPLORER
+    // DATA EXPLORER (inline in import section)
     // ============================
+    function toggleDataExplorer() {
+        const panel = document.getElementById('data-explorer-panel');
+        const btn = document.getElementById('btn-toggle-explorer');
+        const visible = !panel.classList.contains('hidden');
+        if (visible) {
+            panel.classList.add('hidden');
+            btn.textContent = 'Mostrar';
+        } else {
+            panel.classList.remove('hidden');
+            btn.textContent = 'Ocultar';
+            loadDataExplorer();
+        }
+    }
+
     async function loadDataExplorer(page) {
         const pageNum = typeof page === 'number' ? page : 1;
         const search = document.getElementById('data-search').value;
@@ -849,6 +900,9 @@ const App = (() => {
 
         const result = await Database.queryOperations({ type, search }, pageNum);
         UI.renderDataTable(result);
+
+        const countEl = document.getElementById('data-record-count');
+        if (countEl) countEl.textContent = `${result.total.toLocaleString()} registros`;
     }
 
     // ============================

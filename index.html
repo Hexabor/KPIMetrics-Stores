@@ -9,6 +9,8 @@
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <!-- Pako for gzip compression of backups -->
     <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
+    <!-- Chart.js for evolution graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://apis.google.com/js/api.js" defer></script>
 </head>
 <body>
@@ -33,9 +35,6 @@
         </button>
         <button class="sidebar-btn" data-section="import" title="Importar CSV">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        </button>
-        <button class="sidebar-btn" data-section="data" title="Explorar datos">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
         </button>
         <button class="sidebar-btn" data-section="settings" title="Configuracion">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
@@ -73,15 +72,6 @@
                         </div>
                     </div>
 
-                    <div class="home-card clickable" data-action="go-data">
-                        <div class="home-card-icon data-icon">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                        </div>
-                        <div>
-                            <strong>Explorar datos</strong>
-                            <small id="home-record-count">-- registros</small>
-                        </div>
-                    </div>
 
                     <h4 class="home-col-label" style="margin-top:1.5rem;">HISTORIAL</h4>
                     <div class="home-card">
@@ -102,10 +92,10 @@
                             <h3>Resumen</h3>
                             <div class="summary-filters">
                                 <select id="home-summary-period">
+                                    <option value="all" selected>Todo</option>
                                     <option value="current-week">Esta semana</option>
                                     <option value="last-week">Semana pasada</option>
                                     <option value="last-4">Ultimas 4 semanas</option>
-                                    <option value="all">Todo</option>
                                 </select>
                                 <select id="home-summary-store">
                                     <option value="all">Todas las tiendas</option>
@@ -295,27 +285,29 @@
                     </table>
                 </div>
             </div>
-        </section>
 
-        <!-- DATA EXPLORER -->
-        <section id="section-data" class="section hidden">
-            <div class="section-header">
-                <h2>Explorar datos</h2>
-                <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
+            <!-- Data explorer (inline) -->
+            <div class="import-data-explorer">
+                <h4 class="home-col-label" style="margin-top:2rem;">
+                    VERIFICAR DATOS
+                    <button class="btn btn-secondary btn-sm" id="btn-toggle-explorer" style="margin-left:0.75rem;">Mostrar</button>
+                </h4>
+                <div id="data-explorer-panel" class="hidden">
+                    <div class="data-toolbar">
+                        <input type="text" id="data-search" placeholder="Buscar..." class="input-search">
+                        <select id="data-filter-type">
+                            <option value="all">Todos los tipos</option>
+                            <option value="sale">Sale</option>
+                            <option value="cash buy">Cash Buy</option>
+                            <option value="exchange">Exchange</option>
+                            <option value="rma">RMA</option>
+                        </select>
+                        <span class="data-record-count" id="data-record-count"></span>
+                    </div>
+                    <div id="data-table-container" class="table-container"><table id="data-table"></table></div>
+                    <div class="pagination" id="data-pagination"></div>
+                </div>
             </div>
-            <div class="data-toolbar">
-                <input type="text" id="data-search" placeholder="Buscar..." class="input-search">
-                <select id="data-filter-type">
-                    <option value="all">Todos los tipos</option>
-                    <option value="sale">Sale</option>
-                    <option value="cash buy">Cash Buy</option>
-                    <option value="exchange">Exchange</option>
-                    <option value="rma">RMA</option>
-                </select>
-                <button class="btn btn-secondary" id="btn-export">Exportar JSON</button>
-            </div>
-            <div id="data-table-container" class="table-container"><table id="data-table"></table></div>
-            <div class="pagination" id="data-pagination"></div>
         </section>
 
         <!-- SETTINGS -->
@@ -356,54 +348,7 @@
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
 
-            <!-- SUMMARY TABLE -->
             <div class="kpi-panel">
-                <div class="kpi-panel-header">
-                    <h3 class="kpi-panel-title" id="kpi-summary-title">Resumen</h3>
-                    <div class="kpi-panel-filters">
-                        <select id="kpi-panel-scope">
-                            <option value="staff">Por empleado</option>
-                            <option value="total">Global tienda</option>
-                        </select>
-                        <select id="kpi-panel-period">
-                            <option value="current-week">Esta semana</option>
-                            <option value="last-week">Semana pasada</option>
-                            <option value="week-pick">Semana...</option>
-                            <option value="last-4" selected>Ultimas 4 semanas</option>
-                            <option value="all">Todo</option>
-                        </select>
-                        <select id="kpi-panel-week-pick" class="week-input" style="width:70px; display:none;">
-                        </select>
-                        <select id="kpi-panel-store">
-                            <option value="all">Todas las tiendas</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="kpi-panel-week-range" id="kpi-panel-week-range"></div>
-                <div class="kpi-panel-body">
-                    <table class="kpi-table" id="kpi-panel-table">
-                        <thead id="kpi-panel-thead">
-                            <tr>
-                                <th class="sortable" data-col="name">Empleado</th>
-                                <th class="sortable" data-col="mobiles">Moviles</th>
-                                <th class="sortable" data-col="mobilesTotal">Total</th>
-                                <th class="sortable" data-col="services">Services</th>
-                                <th class="sortable" data-col="pctServices">% Gel</th>
-                                <th class="sortable" data-col="basics">Basics</th>
-                                <th class="sortable" data-col="pctBasics">% Basics</th>
-                                <th class="sortable" data-col="pctCombo">% Combo</th>
-                            </tr>
-                        </thead>
-                        <tbody id="kpi-panel-tbody">
-                            <tr><td colspan="7" class="empty-msg">Sin datos. Importa un CSV para empezar.</td></tr>
-                        </tbody>
-                        <tfoot id="kpi-panel-tfoot"></tfoot>
-                    </table>
-                </div>
-            </div>
-
-            <!-- WEEKLY EVOLUTION -->
-            <div class="kpi-panel" style="margin-top:1.25rem;">
                 <div class="kpi-panel-header">
                     <h3 class="kpi-panel-title">Evolucion semanal</h3>
                     <div class="kpi-panel-filters">
@@ -424,8 +369,20 @@
                             <option value="staff">Por empleado</option>
                             <option value="total">Total tienda</option>
                         </select>
+                        <select id="evo-top-n">
+                            <option value="all" selected>Todos</option>
+                            <option value="3">Top 3</option>
+                            <option value="5">Top 5</option>
+                            <option value="10">Top 10</option>
+                        </select>
+                        <select id="kpi-panel-store">
+                            <option value="all">Todas las tiendas</option>
+                        </select>
                     </div>
                 </div>
+                <div class="kpi-panel-week-range" id="kpi-panel-week-range"></div>
+
+                <!-- Table -->
                 <div class="kpi-panel-body">
                     <div class="table-container">
                         <table class="kpi-table" id="evo-table">
@@ -435,6 +392,22 @@
                             </tbody>
                             <tfoot id="evo-tfoot"></tfoot>
                         </table>
+                    </div>
+                </div>
+
+                <!-- Chart (toggleable) -->
+                <div class="evo-chart-toggle">
+                    <button class="btn btn-secondary btn-sm" id="btn-toggle-chart">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        Grafico
+                    </button>
+                    <span class="evo-chart-info" id="evo-chart-info" title="">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                    </span>
+                </div>
+                <div class="evo-chart-section collapsed" id="evo-chart-section">
+                    <div class="evo-chart-container">
+                        <canvas id="evo-chart"></canvas>
                     </div>
                 </div>
             </div>
