@@ -97,9 +97,10 @@
                                     <option value="last-week">Semana pasada</option>
                                     <option value="last-4">Ultimas 4 semanas</option>
                                 </select>
-                                <select id="home-summary-store">
-                                    <option value="all">Todas las tiendas</option>
-                                </select>
+                                <div class="search-select" id="home-summary-store-wrap">
+                                    <input type="text" class="search-select-input" id="home-summary-store" placeholder="Todas las tiendas" value="">
+                                    <div class="search-select-dropdown" id="home-summary-store-list"></div>
+                                </div>
                             </div>
                         </div>
                         <div class="summary-stats" id="home-summary-stats">
@@ -213,11 +214,11 @@
                             <small>Operaciones de tienda</small>
                         </div>
                     </button>
-                    <button class="import-source-btn disabled" data-source="ecom" title="Proximamente">
+                    <button class="import-source-btn" data-source="ecom">
                         <span class="import-source-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>
                         <div>
                             <strong>Ecom Sales</strong>
-                            <small>Proximamente</small>
+                            <small>Ordenes e-commerce (solo fecha y referencia)</small>
                         </div>
                     </button>
                     <button class="import-source-btn disabled" data-source="attachment" title="Proximamente">
@@ -285,6 +286,9 @@
                     </table>
                 </div>
             </div>
+
+            <!-- Ecom coverage timeline -->
+            <div id="ecom-timeline" class="ecom-timeline hidden"></div>
 
             <!-- Data explorer (inline) -->
             <div class="import-data-explorer">
@@ -375,9 +379,15 @@
                             <option value="5">Top 5</option>
                             <option value="10">Top 10</option>
                         </select>
-                        <select id="kpi-panel-store">
-                            <option value="all">Todas las tiendas</option>
-                        </select>
+                        <div class="search-select" id="kpi-panel-store-wrap">
+                            <input type="text" class="search-select-input" id="kpi-panel-store" placeholder="Todas las tiendas" value="">
+                            <div class="search-select-dropdown" id="kpi-panel-store-list"></div>
+                        </div>
+                        <label class="toggle-switch" title="Excluir ordenes e-commerce">
+                            <input type="checkbox" id="evo-exclude-ecom">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Solo tienda</span>
+                        </label>
                     </div>
                 </div>
                 <div class="kpi-panel-week-range" id="kpi-panel-week-range"></div>

@@ -28,6 +28,17 @@ const Database = (() => {
             settings: 'key'
         });
 
+        // v4: add channel field (tienda/ecom) + source index - backfill existing as 'tienda'
+        db.version(4).stores({
+            operations: '++id, reference, type, category, date, store, staff, week, channel, source, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
+            imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
+            settings: 'key'
+        }).upgrade(tx => {
+            return tx.table('operations').toCollection().modify(rec => {
+                if (!rec.channel) rec.channel = 'tienda';
+            });
+        });
+
         return db;
     }
 
@@ -45,6 +56,7 @@ const Database = (() => {
             for (const rec of batch) {
                 if (weekFn) rec.week = weekFn(rec.date);
                 if (source) rec.source = source;
+                if (!rec.channel) rec.channel = 'tienda';
             }
             await db.operations.bulkAdd(batch);
             added += batch.length;
@@ -52,6 +64,96 @@ const Database = (() => {
         }
 
         return added;
+    }
+
+    /**
+     * Cross-reference ecom orders: mark baby-banking records whose reference
+     * matches an ecom order as channel='ecom'.
+     * Returns { tagged, alreadyTagged, notFound } counts.
+     */
+    async function crossReferenceEcom(ecomRecords, onProgress) {
+        const refs = [...new Set(ecomRecords.map(r => r.reference).filter(Boolean))];
+        if (!refs.length) return { tagged: 0, alreadyTagged: 0, notFound: 0 };
+
+        // Build a date lookup from ecom records (for metadata)
+        const ecomDates = ecomRecords.map(r => r.date).filter(Boolean).sort();
+
+        // Find all baby-banking records matching these references
+        const BATCH = 500;
+        let tagged = 0;
+        let alreadyTagged = 0;
+        let matchedRefs = new Set();
+
+        for (let i = 0; i < refs.length; i += BATCH) {
+            const chunk = refs.slice(i, i + BATCH);
+            const matches = await db.operations
+                .where('reference')
+                .anyOf(chunk)
+                .filter(r => r.source === 'baby-banking')
+                .toArray();
+
+            const ids = [];
+            for (const m of matches) {
+                matchedRefs.add(m.reference);
+                if (m.channel === 'ecom') {
+                    alreadyTagged++;
+                } else {
+                    ids.push(m.id);
+                }
+            }
+
+            if (ids.length > 0) {
+                await db.operations.where('id').anyOf(ids).modify({ channel: 'ecom' });
+                tagged += ids.length;
+            }
+
+            if (onProgress) onProgress(Math.min(i + BATCH, refs.length), refs.length);
+        }
+
+        const notFound = refs.length - matchedRefs.size;
+        return { tagged, alreadyTagged, notFound, ecomDateFrom: ecomDates[0], ecomDateTo: ecomDates[ecomDates.length - 1] };
+    }
+
+    /**
+     * Get ecom coverage info: date ranges for baby-banking data
+     * and which portions have been cross-referenced with ecom.
+     */
+    async function getEcomCoverage() {
+        const allBB = await db.operations
+            .where('source').equals('baby-banking')
+            .toArray();
+
+        if (!allBB.length) return null;
+
+        const dates = allBB.map(r => r.date).filter(Boolean).sort();
+        const bbFrom = dates[0];
+        const bbTo = dates[dates.length - 1];
+
+        // Get ecom import history to find covered date ranges
+        const ecomImports = await db.imports
+            .where('source').equals('ecom')
+            .toArray();
+
+        // Merge covered ranges
+        const coveredRanges = ecomImports
+            .filter(imp => imp.dateFrom && imp.dateTo)
+            .map(imp => ({ from: imp.dateFrom, to: imp.dateTo }))
+            .sort((a, b) => a.from.localeCompare(b.from));
+
+        // Count channel distribution
+        let ecomCount = 0;
+        let tiendaCount = 0;
+        for (const r of allBB) {
+            if (r.channel === 'ecom') ecomCount++;
+            else tiendaCount++;
+        }
+
+        return {
+            bbFrom, bbTo,
+            totalRecords: allBB.length,
+            ecomCount, tiendaCount,
+            coveredRanges
+        };
     }
 
     async function logImport(meta) {
@@ -188,6 +290,8 @@ const Database = (() => {
         bulkAddOperations,
         logImport,
         getExistingFingerprints,
+        crossReferenceEcom,
+        getEcomCoverage,
         getRecordCount,
         getDateRange,
         getDistinctValues,

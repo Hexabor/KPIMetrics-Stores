@@ -4,6 +4,19 @@
  */
 const Changelog = [
     {
+        date: '08/04/2026 (sesion 3)',
+        items: [
+            { type: 'new', text: 'Importador Ecom Sales activo: cruza ordenes ecom con Baby Banking y marca canal (ecom/tienda)' },
+            { type: 'new', text: 'Campo "channel" en registros: distingue ventas en caja vs e-commerce' },
+            { type: 'new', text: 'Switch "Solo tienda" en evolucion semanal: excluye ordenes ecom de los KPIs' },
+            { type: 'new', text: 'Timeline de cobertura ecom: barra visual con rango Baby Banking y tramos cruzados' },
+            { type: 'new', text: 'Columna Total sombreada en tabla de evolucion para diferenciarla de semanas' },
+            { type: 'new', text: 'Escala del eje Y visible en el grafico, alineada en la columna previa' },
+            { type: 'fix', text: 'Mapping Ecom Sales corregido: columnas reales "Dispatch Date(As per CWCM)" y "Epos OrderID"' },
+            { type: 'fix', text: 'Index "source" anadido al schema DB v4 (requerido por consulta de cobertura ecom)' },
+        ]
+    },
+    {
         date: '08/04/2026 (sesion 2)',
         items: [
             { type: 'new', text: 'Grafico de evolucion semanal con Chart.js: lineas por empleado o total tienda' },

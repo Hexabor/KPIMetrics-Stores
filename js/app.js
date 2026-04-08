@@ -98,19 +98,22 @@ const App = (() => {
             if (e.target.dataset.page) loadDataExplorer(parseInt(e.target.dataset.page));
         });
 
+        // Store selects (searchable)
+        initStoreSelect('home-summary-store', 'home-summary-store-list', refreshHomeSummary);
+        initStoreSelect('kpi-panel-store', 'kpi-panel-store-list', refreshEvolution);
+
         // Home summary filters
         document.getElementById('home-summary-period').addEventListener('change', refreshHomeSummary);
-        document.getElementById('home-summary-store').addEventListener('change', refreshHomeSummary);
 
-        // KPI Mobiles: single set of filters
-        document.getElementById('kpi-panel-store').addEventListener('change', refreshKPIMobiles);
+        // KPI Mobiles filters
         document.getElementById('evo-week-from').addEventListener('change', refreshEvolution);
         document.getElementById('evo-week-to').addEventListener('change', refreshEvolution);
         document.getElementById('evo-metric').addEventListener('change', refreshEvolution);
         document.getElementById('evo-scope').addEventListener('change', refreshEvolution);
 
-        // Top N + chart toggle
+        // Top N + ecom filter + chart toggle
         document.getElementById('evo-top-n').addEventListener('change', refreshEvolution);
+        document.getElementById('evo-exclude-ecom').addEventListener('change', refreshEvolution);
         document.getElementById('btn-toggle-chart').addEventListener('click', toggleEvoChart);
 
         // Changelog
@@ -152,7 +155,7 @@ const App = (() => {
         if (sidebarBtn) sidebarBtn.classList.add('active');
 
         if (sectionId === 'home') refreshHome();
-        if (sectionId === 'import') renderImportHistory();
+        if (sectionId === 'import') { renderImportHistory(); renderEcomTimeline(); }
         if (sectionId === 'settings') loadSettings();
         if (sectionId === 'kpi-mobiles') refreshKPIMobiles();
     }
@@ -199,14 +202,86 @@ const App = (() => {
         await refreshHomeSummary();
     }
 
-    function populateStoreSelect(selectId, stores) {
-        const sel = document.getElementById(selectId);
-        const current = sel.value;
-        sel.innerHTML = '<option value="all">Todas las tiendas</option>';
-        for (const s of stores) {
-            sel.innerHTML += `<option value="${s}">${s}</option>`;
+    // ============================
+    // SEARCHABLE STORE SELECT
+    // ============================
+    const storeSelects = {};
+
+    function initStoreSelect(inputId, listId, onChange) {
+        const input = document.getElementById(inputId);
+        const list = document.getElementById(listId);
+        const state = { stores: [], value: 'all', onChange };
+        storeSelects[inputId] = state;
+
+        input.addEventListener('focus', () => {
+            renderStoreList(inputId);
+            list.classList.add('open');
+        });
+
+        input.addEventListener('input', () => {
+            renderStoreList(inputId);
+            list.classList.add('open');
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { list.classList.remove('open'); input.blur(); }
+        });
+
+        // Close on click outside
+        document.addEventListener('click', (e) => {
+            if (!input.contains(e.target) && !list.contains(e.target)) {
+                list.classList.remove('open');
+                // If text doesn't match a store, reset to current
+                syncInputDisplay(inputId);
+            }
+        });
+    }
+
+    function renderStoreList(inputId) {
+        const state = storeSelects[inputId];
+        const input = document.getElementById(inputId);
+        const list = document.getElementById(inputId + '-list');
+        const filter = input.value.toLowerCase();
+
+        const options = [{ value: 'all', label: 'Todas las tiendas' }];
+        for (const s of state.stores) {
+            options.push({ value: s, label: s });
         }
-        sel.value = current || 'all';
+
+        const filtered = options.filter(o => o.label.toLowerCase().includes(filter));
+
+        list.innerHTML = filtered.map(o =>
+            `<div class="search-select-option" data-value="${escapeHtml(o.value)}">${escapeHtml(o.label)}</div>`
+        ).join('');
+
+        list.querySelectorAll('.search-select-option').forEach(opt => {
+            opt.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                state.value = opt.dataset.value;
+                syncInputDisplay(inputId);
+                list.classList.remove('open');
+                if (state.onChange) state.onChange();
+            });
+        });
+    }
+
+    function syncInputDisplay(inputId) {
+        const state = storeSelects[inputId];
+        const input = document.getElementById(inputId);
+        input.value = state.value === 'all' ? '' : state.value;
+        input.placeholder = state.value === 'all' ? 'Todas las tiendas' : state.value;
+    }
+
+    function populateStoreSelect(inputId, stores) {
+        const state = storeSelects[inputId];
+        if (!state) return;
+        state.stores = stores;
+        syncInputDisplay(inputId);
+    }
+
+    function getStoreValue(inputId) {
+        const state = storeSelects[inputId];
+        return state ? state.value : 'all';
     }
 
     // ============================
@@ -253,7 +328,7 @@ const App = (() => {
 
     async function refreshHomeSummary() {
         const periodValue = document.getElementById('home-summary-period').value;
-        const store = document.getElementById('home-summary-store').value;
+        const store = getStoreValue('home-summary-store');
         const range = getPeriodDateRange(periodValue);
 
         const filters = { store: store };
@@ -345,7 +420,7 @@ const App = (() => {
         const weekTo = parseInt(document.getElementById('evo-week-to').value) || weekFrom;
         evoState.metric = document.getElementById('evo-metric').value;
         evoState.scope = document.getElementById('evo-scope').value;
-        const store = document.getElementById('kpi-panel-store').value;
+        const store = getStoreValue('kpi-panel-store');
 
         // Persist week range
         await Database.setSetting('evoWeekFrom', weekFrom);
@@ -379,6 +454,10 @@ const App = (() => {
         let sales = allData.filter(r => r.type === 'sale');
         if (store && store !== 'all') {
             sales = sales.filter(r => r.store === store);
+        }
+        const excludeEcom = document.getElementById('evo-exclude-ecom').checked;
+        if (excludeEcom) {
+            sales = sales.filter(r => r.channel !== 'ecom');
         }
 
         evoState.staffWeekData = {};
@@ -479,7 +558,7 @@ const App = (() => {
         thead.innerHTML = `<tr>
             <th class="sortable${sortCls('name')}" data-evo-sort="name">${scope === 'total' ? '' : 'Empleado'}</th>
             ${weeks.map(w => `<th class="sortable${sortCls(w)}" data-evo-sort="${w}">W${w}</th>`).join('')}
-            <th class="sortable${sortCls('total')}" data-evo-sort="total"><strong>Total</strong></th>
+            <th class="sortable col-total${sortCls('total')}" data-evo-sort="total"><strong>Total</strong></th>
         </tr>`;
 
         // Bind sort clicks
@@ -520,7 +599,7 @@ const App = (() => {
             return `<tr${selected} data-staff="${escapeHtml(name)}">
                 <td>${escapeHtml(name)}</td>
                 ${weeks.map(w => `<td>${evoCellValue(wd?.[w], metric)}</td>`).join('')}
-                <td><strong>${evoRowTotal(wd || {}, metric, weeks)}</strong></td>
+                <td class="col-total"><strong>${evoRowTotal(wd || {}, metric, weeks)}</strong></td>
             </tr>`;
         }).join('');
 
@@ -537,7 +616,7 @@ const App = (() => {
             tfoot.innerHTML = `<tr data-staff="__TOTAL__">
                 <td>TOTAL</td>
                 ${weeks.map(w => `<td><strong>${evoCellValue(colTotals[w], metric)}</strong></td>`).join('')}
-                <td><strong>${evoRowTotal(colTotals, metric, weeks)}</strong></td>
+                <td class="col-total"><strong>${evoRowTotal(colTotals, metric, weeks)}</strong></td>
             </tr>`;
         } else {
             tfoot.innerHTML = '';
@@ -634,6 +713,28 @@ const App = (() => {
             return;
         }
 
+        // Align chart dots to the CENTER of each week column
+        // Reserve space for Y-axis labels in the employee column
+        const Y_AXIS_WIDTH = 36;
+        const table = document.getElementById('evo-table');
+        const headerCells = table?.querySelectorAll('thead th');
+        if (headerCells && headerCells.length > 2) {
+            const firstWeekTh = headerCells[1];
+            const lastWeekTh = headerCells[headerCells.length - 2];
+            const panelRect = container.parentElement.getBoundingClientRect();
+            const firstRect = firstWeekTh.getBoundingClientRect();
+            const lastRect = lastWeekTh.getBoundingClientRect();
+
+            // Center of first week column and center of last week column
+            const firstCenter = firstRect.left + firstRect.width / 2 - panelRect.left;
+            const lastCenter = lastRect.left + lastRect.width / 2 - panelRect.left;
+            const rightMargin = panelRect.width - lastCenter;
+
+            // Shift left to make room for Y-axis labels (they sit in the employee column)
+            container.style.marginLeft = (firstCenter - Y_AXIS_WIDTH) + 'px';
+            container.style.marginRight = rightMargin + 'px';
+        }
+
         const labels = weeks.map(w => `W${w}`);
         const isPct = chartMetric.startsWith('pct');
         const topNVal = document.getElementById('evo-top-n').value;
@@ -709,6 +810,7 @@ const App = (() => {
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                layout: { padding: 0 },
                 interaction: { mode: 'index', intersect: false },
                 plugins: {
                     legend: {
@@ -729,14 +831,20 @@ const App = (() => {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            font: { size: 10 },
-                            callback: val => isPct ? val + '%' : val
+                            font: { size: 9 },
+                            color: '#94a3b8',
+                            callback: val => isPct ? val + '%' : val,
+                            mirror: true,
+                            padding: 4,
+                            align: 'end'
                         },
-                        grid: { color: '#f1f5f9' }
+                        grid: { color: '#f1f5f9' },
+                        afterFit: (axis) => { axis.width = Y_AXIS_WIDTH; }
                     },
                     x: {
                         ticks: { font: { size: 10 } },
-                        grid: { display: false }
+                        grid: { display: false },
+                        offset: false
                     }
                 }
             }
@@ -765,7 +873,7 @@ const App = (() => {
         UI.addLog(`Archivo: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`);
 
         try {
-            const preview = await CSVParser.parsePreview(file);
+            const preview = await CSVParser.parsePreview(file, 20, currentImportSource);
             currentPreviewData = { file, mapping: preview.detectedMapping };
             UI.showPreview(preview.headers, preview.rows, preview.detectedMapping);
             UI.addLog(`Vista previa: ${preview.headers.length} columnas, ${Object.keys(preview.detectedMapping).length} mapeadas`);
@@ -785,10 +893,17 @@ const App = (() => {
         try {
             const result = await CSVParser.parseFull(file, mapping, (count) => {
                 UI.showProgress(count, count, `Parseando... ${count.toLocaleString()} filas`);
-            });
+            }, currentImportSource);
 
             UI.addLog(`Parseado: ${result.records.length} validas de ${result.totalRows}`);
 
+            // Ecom Sales: cross-reference, don't store
+            if (currentImportSource === 'ecom') {
+                await confirmEcomImport(result.records, file.name);
+                return;
+            }
+
+            // Baby Banking (and other sources): normal import flow
             // Deduplicate: skip records that already exist from the SAME source
             UI.showProgress(0, 1, 'Comprobando duplicados...');
             const refs = [...new Set(result.records.map(r => r.reference).filter(Boolean))];
@@ -839,11 +954,118 @@ const App = (() => {
 
             currentPreviewData = null;
             await renderImportHistory();
+            await renderEcomTimeline();
             await refreshHome();
         } catch (err) {
             UI.hideProgress();
             UI.addLog(`Error: ${err.message}`, 'error');
         }
+    }
+
+    // ============================
+    // ECOM CROSS-REFERENCE
+    // ============================
+    async function confirmEcomImport(ecomRecords, filename) {
+        UI.showProgress(0, 1, 'Cruzando con Baby Banking...');
+        UI.addLog(`Cruzando ${ecomRecords.length.toLocaleString()} ordenes ecom...`);
+
+        try {
+            const result = await Database.crossReferenceEcom(ecomRecords, (current, total) => {
+                UI.showProgress(current, total, `Cruzando referencias... ${current}/${total}`);
+            });
+
+            // Log the import for audit trail
+            await Database.logImport({
+                source: 'ecom',
+                filename,
+                rowCount: result.tagged,
+                dateFrom: result.ecomDateFrom || null,
+                dateTo: result.ecomDateTo || null,
+                storeCount: 0,
+                stores: []
+            });
+
+            UI.hideProgress();
+
+            const parts = [];
+            if (result.tagged > 0) parts.push(`${result.tagged} operaciones marcadas como ecom`);
+            if (result.alreadyTagged > 0) parts.push(`${result.alreadyTagged} ya estaban marcadas`);
+            if (result.notFound > 0) parts.push(`${result.notFound} referencias no encontradas en Baby Banking`);
+
+            UI.addLog(`Cruce completado: ${parts.join(', ')}`, 'success');
+
+            currentPreviewData = null;
+            await renderImportHistory();
+            await renderEcomTimeline();
+            await refreshHome();
+        } catch (err) {
+            UI.hideProgress();
+            UI.addLog(`Error en cruce ecom: ${err.message}`, 'error');
+        }
+    }
+
+    // ============================
+    // ECOM COVERAGE TIMELINE
+    // ============================
+    async function renderEcomTimeline() {
+        const container = document.getElementById('ecom-timeline');
+        if (!container) return;
+
+        const coverage = await Database.getEcomCoverage();
+        if (!coverage) {
+            container.classList.add('hidden');
+            return;
+        }
+
+        container.classList.remove('hidden');
+
+        const { bbFrom, bbTo, totalRecords, ecomCount, tiendaCount, coveredRanges } = coverage;
+
+        // Calculate timeline dimensions
+        const bbStart = new Date(bbFrom).getTime();
+        const bbEnd = new Date(bbTo).getTime();
+        const totalSpan = bbEnd - bbStart || 1;
+
+        // Build covered segments as percentage positions
+        const segments = coveredRanges.map(r => {
+            const from = Math.max(new Date(r.from).getTime(), bbStart);
+            const to = Math.min(new Date(r.to).getTime(), bbEnd);
+            return {
+                left: ((from - bbStart) / totalSpan * 100).toFixed(2),
+                width: (((to - from) / totalSpan) * 100).toFixed(2)
+            };
+        });
+
+        const pctEcom = totalRecords > 0 ? ((ecomCount / totalRecords) * 100).toFixed(1) : '0';
+
+        container.innerHTML = `
+            <h4 class="home-col-label" style="margin-top:2rem;">
+                COBERTURA ECOM
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:0.4rem; vertical-align:-1px; opacity:0.5;">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+            </h4>
+            <div class="ecom-timeline-bar-wrap">
+                <div class="ecom-timeline-labels">
+                    <span>${UI.formatDate(bbFrom)}</span>
+                    <span>${UI.formatDate(bbTo)}</span>
+                </div>
+                <div class="ecom-timeline-bar">
+                    ${segments.map(s =>
+                        `<div class="ecom-timeline-covered" style="left:${s.left}%;width:${s.width}%"></div>`
+                    ).join('')}
+                </div>
+                <div class="ecom-timeline-legend">
+                    <span class="ecom-legend-item"><span class="ecom-legend-dot covered"></span> Cruzado con ecom</span>
+                    <span class="ecom-legend-item"><span class="ecom-legend-dot uncovered"></span> Sin datos ecom</span>
+                </div>
+            </div>
+            <div class="ecom-timeline-stats">
+                <span>${ecomCount.toLocaleString()} ecom</span>
+                <span>${tiendaCount.toLocaleString()} tienda</span>
+                <span>${pctEcom}% ecom</span>
+            </div>
+        `;
     }
 
     // ============================

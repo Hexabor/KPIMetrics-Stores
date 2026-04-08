@@ -25,6 +25,18 @@ const CSVParser = (() => {
         'price': 'price'
     };
 
+    // Ecom Sales mapping: only date and order reference
+    // Real header: "Dispatch Date(As per CWCM)", "Epos OrderID"
+    const ECOM_MAPPING = {
+        'dispatch date(as per cwcm)': 'date',
+        'epos orderid': 'reference'
+    };
+
+    // Source-specific mappings
+    const SOURCE_MAPPINGS = {
+        'ecom': ECOM_MAPPING
+    };
+
     let columnMapping = { ...DEFAULT_MAPPING };
 
     /** Update column mapping */
@@ -40,7 +52,7 @@ const CSVParser = (() => {
      * Parse a CSV file and return preview data.
      * Only reads first N rows for preview.
      */
-    function parsePreview(file, maxRows = 20) {
+    function parsePreview(file, maxRows = 20, source) {
         return new Promise((resolve, reject) => {
             Papa.parse(file, {
                 header: true,
@@ -51,7 +63,7 @@ const CSVParser = (() => {
                     resolve({
                         headers,
                         rows: results.data,
-                        detectedMapping: detectMapping(headers),
+                        detectedMapping: detectMapping(headers, source),
                         errors: results.errors
                     });
                 },
@@ -63,12 +75,13 @@ const CSVParser = (() => {
     }
 
     /** Detect which CSV columns map to our internal fields */
-    function detectMapping(headers) {
+    function detectMapping(headers, source) {
+        const mapping = SOURCE_MAPPINGS[source] || columnMapping;
         const detected = {};
         for (const header of headers) {
             const normalized = header.trim().toLowerCase();
-            if (columnMapping[normalized]) {
-                detected[header] = columnMapping[normalized];
+            if (mapping[normalized]) {
+                detected[header] = mapping[normalized];
             }
         }
         return detected;
@@ -78,7 +91,7 @@ const CSVParser = (() => {
      * Parse the full CSV file and return normalized records.
      * Uses streaming for large files.
      */
-    function parseFull(file, mapping, onProgress) {
+    function parseFull(file, mapping, onProgress, source) {
         return new Promise((resolve, reject) => {
             const records = [];
             let rowCount = 0;
@@ -89,7 +102,7 @@ const CSVParser = (() => {
                 step(results) {
                     rowCount++;
                     const raw = results.data;
-                    const record = mapRecord(raw, mapping);
+                    const record = mapRecord(raw, mapping, source);
                     if (record) {
                         records.push(record);
                     }
@@ -120,13 +133,27 @@ const CSVParser = (() => {
      * Discards: product, serial, sku, till, _raw.
      * Discards rows of type transfer or refund.
      */
-    function mapRecord(raw, mapping) {
+    function mapRecord(raw, mapping, source) {
         const record = {};
 
         for (const [csvCol, internalField] of Object.entries(mapping)) {
             if (raw[csvCol] !== undefined) {
                 record[internalField] = raw[csvCol];
             }
+        }
+
+        // Ecom Sales: only reference + date, discard everything else
+        if (source === 'ecom') {
+            if (record.date) {
+                record.date = normalizeDate(record.date);
+            }
+            if (record.reference) {
+                record.reference = record.reference.trim();
+            }
+            if (!record.reference && !record.date) {
+                return null;
+            }
+            return record;
         }
 
         // Normalize type first (needed for discard check)
