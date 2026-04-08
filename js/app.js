@@ -12,6 +12,7 @@ const App = (() => {
         'captacion': 'Captacion'
     };
 
+
     async function init() {
         try {
             Database.init();
@@ -63,41 +64,36 @@ const App = (() => {
             el.addEventListener('click', () => handleAction(el.dataset.action));
         });
 
-        // CSV import
-        const dropZone = document.getElementById('drop-zone');
-        const csvInput = document.getElementById('csv-input');
+        // CSV import: each drop zone is its own source
+        document.querySelectorAll('.import-zone:not(.disabled)').forEach(zone => {
+            const input = zone.querySelector('input[type="file"]');
+            const source = zone.dataset.source;
 
-        document.getElementById('btn-select-file').addEventListener('click', (e) => {
-            e.stopPropagation();
-            csvInput.click();
-        });
-        dropZone.addEventListener('click', () => csvInput.click());
-        dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('drag-over');
-            if (e.dataTransfer.files[0]) handleFileSelected(e.dataTransfer.files[0]);
-        });
-        csvInput.addEventListener('change', (e) => {
-            if (e.target.files[0]) handleFileSelected(e.target.files[0]);
+            zone.addEventListener('click', () => input.click());
+            zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('drag-over'); });
+            zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+            zone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                zone.classList.remove('drag-over');
+                if (e.dataTransfer.files[0]) {
+                    currentImportSource = source;
+                    handleFileSelected(e.dataTransfer.files[0]);
+                }
+            });
+            input.addEventListener('click', (e) => e.stopPropagation());
+            input.addEventListener('change', (e) => {
+                if (e.target.files[0]) {
+                    currentImportSource = source;
+                    handleFileSelected(e.target.files[0]);
+                }
+                e.target.value = '';
+            });
         });
 
         document.getElementById('btn-confirm-import').addEventListener('click', confirmImport);
         document.getElementById('btn-cancel-import').addEventListener('click', () => {
             currentPreviewData = null;
             UI.hidePreview();
-        });
-
-        // Import source buttons
-        document.querySelectorAll('.import-source-btn:not(.disabled)').forEach(btn => {
-            btn.addEventListener('click', () => {
-                document.querySelectorAll('.import-source-btn').forEach(b => b.classList.remove('active-source'));
-                btn.classList.add('active-source');
-                currentImportSource = btn.dataset.source;
-                document.getElementById('drop-zone-label').innerHTML =
-                    `Arrastra un CSV de <strong>${SOURCE_LABELS[currentImportSource]}</strong> o haz clic para seleccionar`;
-            });
         });
 
         // Data explorer toggle
@@ -1036,40 +1032,67 @@ const App = (() => {
         const bbEnd = new Date(bbTo).getTime();
         const totalSpan = bbEnd - bbStart || 1;
 
-        // Build covered segments as percentage positions
+        // Build covered segments with percentage positions and dates
         const segments = coveredRanges.map(r => {
             const from = Math.max(new Date(r.from).getTime(), bbStart);
             const to = Math.min(new Date(r.to).getTime(), bbEnd);
             return {
                 left: ((from - bbStart) / totalSpan * 100).toFixed(2),
-                width: (((to - from) / totalSpan) * 100).toFixed(2)
+                width: (((to - from) / totalSpan) * 100).toFixed(2),
+                fromDate: r.from,
+                toDate: r.to
             };
         });
 
+        // Build gap list (uncovered periods between BB range and ecom segments)
+        const gaps = [];
+        let cursor = bbFrom;
+        for (const r of coveredRanges) {
+            if (r.from > cursor) {
+                gaps.push({ from: cursor, to: r.from });
+            }
+            cursor = r.to > cursor ? r.to : cursor;
+        }
+        if (cursor < bbTo) {
+            gaps.push({ from: cursor, to: bbTo });
+        }
+
         const pctEcom = totalRecords > 0 ? ((ecomCount / totalRecords) * 100).toFixed(1) : '0';
 
-        container.innerHTML = `
-            <h4 class="home-col-label" style="margin-top:2rem;">
-                COBERTURA ECOM
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-left:0.4rem; vertical-align:-1px; opacity:0.5;">
-                    <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+        // Segment date markers on the bar
+        const markers = segments.map(s => {
+            const leftEnd = (parseFloat(s.left) + parseFloat(s.width)).toFixed(2);
+            return `<div class="ecom-timeline-covered" style="left:${s.left}%;width:${s.width}%"
+                        title="${UI.formatDate(s.fromDate)} — ${UI.formatDate(s.toDate)}"></div>
+                    <span class="ecom-marker ecom-marker-start" style="left:${s.left}%">${UI.formatDate(s.fromDate)}</span>
+                    <span class="ecom-marker ecom-marker-end" style="left:${leftEnd}%">${UI.formatDate(s.toDate)}</span>`;
+        }).join('');
+
+        const gapInfo = gaps.length > 0
+            ? `<div class="ecom-gaps">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px; opacity:0.5;flex-shrink:0;">
+                    <circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>
                 </svg>
-            </h4>
+                ${gaps.map(g => `<span class="ecom-gap-label">Sin ecom: ${UI.formatDate(g.from)} — ${UI.formatDate(g.to)}</span>`).join('')}
+              </div>`
+            : '';
+
+        container.innerHTML = `
+            <h4 class="home-col-label" style="margin-top:2rem;">COBERTURA ECOM</h4>
             <div class="ecom-timeline-bar-wrap">
                 <div class="ecom-timeline-labels">
                     <span>${UI.formatDate(bbFrom)}</span>
                     <span>${UI.formatDate(bbTo)}</span>
                 </div>
                 <div class="ecom-timeline-bar">
-                    ${segments.map(s =>
-                        `<div class="ecom-timeline-covered" style="left:${s.left}%;width:${s.width}%"></div>`
-                    ).join('')}
+                    ${markers}
                 </div>
                 <div class="ecom-timeline-legend">
                     <span class="ecom-legend-item"><span class="ecom-legend-dot covered"></span> Cruzado con ecom</span>
                     <span class="ecom-legend-item"><span class="ecom-legend-dot uncovered"></span> Sin datos ecom</span>
                 </div>
             </div>
+            ${gapInfo}
             <div class="ecom-timeline-stats">
                 <span>${ecomCount.toLocaleString()} ecom</span>
                 <span>${tiendaCount.toLocaleString()} tienda</span>

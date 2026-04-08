@@ -203,46 +203,33 @@
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
 
-            <!-- Source buttons -->
-            <div class="import-sources">
-                <h4 class="home-col-label">ORIGEN DE DATOS</h4>
-                <div class="import-source-row">
-                    <button class="import-source-btn active-source" id="btn-source-baby" data-source="baby-banking">
-                        <span class="import-source-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
-                        <div>
-                            <strong>Baby Banking ES</strong>
-                            <small>Operaciones de tienda</small>
-                        </div>
-                    </button>
-                    <button class="import-source-btn" data-source="ecom">
-                        <span class="import-source-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>
-                        <div>
-                            <strong>Ecom Sales</strong>
-                            <small>Ordenes e-commerce (solo fecha y referencia)</small>
-                        </div>
-                    </button>
-                    <button class="import-source-btn disabled" data-source="attachment" title="Proximamente">
-                        <span class="import-source-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
-                        <div>
-                            <strong>Attachment</strong>
-                            <small>Proximamente</small>
-                        </div>
-                    </button>
-                    <button class="import-source-btn disabled" data-source="captacion" title="Proximamente">
-                        <span class="import-source-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
-                        <div>
-                            <strong>Captacion</strong>
-                            <small>Proximamente</small>
-                        </div>
-                    </button>
+            <!-- Drop zones -->
+            <div class="import-drops">
+                <div class="import-zone" data-source="baby-banking">
+                    <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+                    <strong>Baby Banking ES</strong>
+                    <small>Operaciones de tienda</small>
+                    <small class="drop-zone-hint">Datos globales (todas las tiendas)</small>
+                    <input type="file" accept=".csv,.txt" hidden>
                 </div>
-            </div>
-
-            <!-- Drop zone -->
-            <div class="import-zone" id="drop-zone">
-                <p id="drop-zone-label">Arrastra un CSV de <strong>Baby Banking ES</strong> o haz clic para seleccionar</p>
-                <input type="file" id="csv-input" accept=".csv,.txt" hidden>
-                <button class="btn btn-primary" id="btn-select-file">Seleccionar archivo</button>
+                <div class="import-zone" data-source="ecom">
+                    <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>
+                    <strong>Ecom Sales</strong>
+                    <small>Cruza ordenes ecom con Baby Banking</small>
+                    <input type="file" accept=".csv,.txt" hidden>
+                </div>
+                <div class="import-zone disabled" data-source="attachment">
+                    <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg></span>
+                    <strong>Attachment</strong>
+                    <small>Proximamente</small>
+                    <input type="file" accept=".csv,.txt" hidden disabled>
+                </div>
+                <div class="import-zone disabled" data-source="captacion">
+                    <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                    <strong>Captacion</strong>
+                    <small>Proximamente</small>
+                    <input type="file" accept=".csv,.txt" hidden disabled>
+                </div>
             </div>
             <div id="import-preview" class="import-preview hidden">
                 <div class="import-preview-top">

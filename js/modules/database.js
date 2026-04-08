@@ -141,11 +141,22 @@ const Database = (() => {
             .where('source').equals('ecom')
             .toArray();
 
-        // Merge covered ranges
-        const coveredRanges = ecomImports
+        // Merge overlapping covered ranges
+        const rawRanges = ecomImports
             .filter(imp => imp.dateFrom && imp.dateTo)
             .map(imp => ({ from: imp.dateFrom, to: imp.dateTo }))
             .sort((a, b) => a.from.localeCompare(b.from));
+
+        const coveredRanges = [];
+        for (const r of rawRanges) {
+            const last = coveredRanges[coveredRanges.length - 1];
+            if (last && r.from <= last.to) {
+                // Overlapping or adjacent: extend
+                if (r.to > last.to) last.to = r.to;
+            } else {
+                coveredRanges.push({ from: r.from, to: r.to });
+            }
+        }
 
         // Count channel distribution
         let ecomCount = 0;

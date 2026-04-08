@@ -9,11 +9,15 @@ const Changelog = [
             { type: 'new', text: 'Importador Ecom Sales activo: cruza ordenes ecom con Baby Banking y marca canal (ecom/tienda)' },
             { type: 'new', text: 'Campo "channel" en registros: distingue ventas en caja vs e-commerce' },
             { type: 'new', text: 'Switch "Solo tienda" en evolucion semanal: excluye ordenes ecom de los KPIs' },
-            { type: 'new', text: 'Timeline de cobertura ecom: barra visual con rango Baby Banking y tramos cruzados' },
+            { type: 'new', text: 'Timeline de cobertura ecom con fechas de inicio/fin por tramo y huecos sin cobertura' },
+            { type: 'new', text: '4 drop zones independientes en fila (Baby Banking, Ecom, Attachment, Captacion)' },
+            { type: 'new', text: 'Hint contextual en cada drop zone (ej: "Datos globales, todas las tiendas")' },
+            { type: 'new', text: 'Filas ecom sombreadas en violeta tenue en el explorador de datos (Verificar datos)' },
             { type: 'new', text: 'Columna Total sombreada en tabla de evolucion para diferenciarla de semanas' },
             { type: 'new', text: 'Escala del eje Y visible en el grafico, alineada en la columna previa' },
-            { type: 'fix', text: 'Mapping Ecom Sales corregido: columnas reales "Dispatch Date(As per CWCM)" y "Epos OrderID"' },
-            { type: 'fix', text: 'Index "source" anadido al schema DB v4 (requerido por consulta de cobertura ecom)' },
+            { type: 'fix', text: 'Mapping Ecom Sales con fuzzy match: detecta headers con sufijos variables' },
+            { type: 'fix', text: 'DB v5: index "source" en nueva version (Dexie no re-aplica schemas existentes)' },
+            { type: 'fix', text: 'Init robusto: bindEvents siempre se ejecuta aunque falle la carga de settings' },
         ]
     },
     {

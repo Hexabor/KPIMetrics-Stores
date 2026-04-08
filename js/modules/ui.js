@@ -215,7 +215,8 @@ const UI = (() => {
         html += '</tr></thead><tbody>';
 
         for (const record of result.records) {
-            html += '<tr>';
+            const rowCls = record.channel === 'ecom' ? ' class="row-ecom"' : '';
+            html += `<tr${rowCls}>`;
             for (const f of fields) {
                 let val = record[f] || '';
                 // Format date fields as DD/MM/AAAA
