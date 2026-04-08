@@ -28,15 +28,22 @@ const Database = (() => {
             settings: 'key'
         });
 
-        // v4: add channel field (tienda/ecom) + source index - backfill existing as 'tienda'
+        // v4: add channel field (tienda/ecom) - backfill existing as 'tienda'
         db.version(4).stores({
-            operations: '++id, reference, type, category, date, store, staff, week, channel, source, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
+            operations: '++id, reference, type, category, date, store, staff, week, channel, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
             imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
             settings: 'key'
         }).upgrade(tx => {
             return tx.table('operations').toCollection().modify(rec => {
                 if (!rec.channel) rec.channel = 'tienda';
             });
+        });
+
+        // v5: add source index (required for ecom coverage queries)
+        db.version(5).stores({
+            operations: '++id, reference, type, category, date, store, staff, week, channel, source, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
+            imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
+            settings: 'key'
         });
 
         return db;
@@ -120,7 +127,7 @@ const Database = (() => {
      */
     async function getEcomCoverage() {
         const allBB = await db.operations
-            .where('source').equals('baby-banking')
+            .filter(r => r.source === 'baby-banking')
             .toArray();
 
         if (!allBB.length) return null;
