@@ -1810,7 +1810,14 @@ const App = (() => {
                 return;
             }
 
-            await Database.importAll(data);
+            const total = data.operations.length;
+            UI.showProgress(0, total, `Restaurando... 0 de ${total.toLocaleString()}`);
+
+            await Database.importAll(data, (done, tot) => {
+                UI.showProgress(done, tot, `Restaurando... ${done.toLocaleString()} de ${tot.toLocaleString()}`);
+            });
+
+            UI.hideProgress();
 
             // Restore course start if present
             if (data.settings) {

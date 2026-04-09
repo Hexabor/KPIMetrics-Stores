@@ -21,6 +21,7 @@ const Changelog = [
             { type: 'fix', text: 'Importador filtra departamentos no-tienda (RMA, Ecomdistribution, Ecommerce)' },
             { type: 'fix', text: 'Totales de facturacion en Ventas calculados correctamente' },
             { type: 'fix', text: 'Filtrar ecom activado por defecto' },
+            { type: 'new', text: 'Barra de progreso global al restaurar backups (overlay con porcentaje)' },
         ]
     },
     {

@@ -330,11 +330,18 @@ const Database = (() => {
         return { operations, imports, settings, exportDate: new Date().toISOString() };
     }
 
-    async function importAll(data) {
+    async function importAll(data, onProgress) {
         await db.operations.clear();
         await db.imports.clear();
         await db.settings.clear();
-        if (data.operations) await db.operations.bulkAdd(data.operations);
+        if (data.operations && data.operations.length > 0) {
+            const ops = data.operations;
+            const BATCH = 5000;
+            for (let i = 0; i < ops.length; i += BATCH) {
+                await db.operations.bulkAdd(ops.slice(i, i + BATCH));
+                if (onProgress) onProgress(Math.min(i + BATCH, ops.length), ops.length);
+            }
+        }
         if (data.imports) await db.imports.bulkAdd(data.imports);
         if (data.settings) await db.settings.bulkAdd(data.settings);
     }

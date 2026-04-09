@@ -233,10 +233,6 @@
                     <table id="preview-table"></table>
                 </div>
             </div>
-            <div id="import-progress" class="progress-container hidden">
-                <div class="progress-bar"><div class="progress-fill" id="import-progress-fill"></div></div>
-                <p id="import-progress-text">Importando...</p>
-            </div>
 
             <!-- Import history -->
             <div class="import-history">
@@ -511,6 +507,14 @@
     <script src="js/modules/database.js"></script>
     <script src="js/modules/csv-parser.js"></script>
     <script src="js/modules/kpi-engine.js"></script>
+    <!-- Global progress bar -->
+    <div id="import-progress" class="progress-overlay hidden">
+        <div class="progress-overlay-box">
+            <div class="progress-bar"><div class="progress-fill" id="import-progress-fill"></div></div>
+            <p id="import-progress-text">Importando...</p>
+        </div>
+    </div>
+
     <script src="js/modules/drive-sync.js"></script>
     <script src="js/modules/ui.js"></script>
     <script src="js/app.js"></script>
