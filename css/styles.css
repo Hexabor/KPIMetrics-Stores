@@ -297,7 +297,7 @@ body {
 }
 
 .home-col-label {
-    font-size: 0.65rem;
+    font-size: 0.75rem;
     font-weight: 700;
     letter-spacing: 0.1em;
     color: var(--color-text-lighter);
@@ -392,12 +392,6 @@ body {
     font-weight: 700;
 }
 
-.summary-filters {
-    display: flex;
-    gap: 0.5rem;
-}
-
-.summary-filters select,
 .kpi-panel-filters select {
     padding: 0.3rem 0.6rem;
     border: 1px solid var(--color-border);
@@ -408,78 +402,170 @@ body {
     cursor: pointer;
 }
 
-.summary-stats {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 0.75rem;
+/* ===== HOME: COVERAGE BARS ===== */
+.coverage-row {
+    margin-bottom: 1rem;
 }
 
-.stat-box {
-    text-align: center;
-    padding: 0.75rem 0.5rem;
+.coverage-row:last-child {
+    margin-bottom: 0;
+}
+
+.coverage-track {
+    height: 28px;
     background: var(--color-bg);
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
+    position: relative;
+    overflow: hidden;
 }
 
-.stat-value {
-    display: block;
-    font-size: 1.35rem;
-    font-weight: 700;
+.coverage-bar-title {
+    font-size: 0.7rem;
+    font-weight: 600;
     color: var(--color-text);
-    line-height: 1.2;
-}
-
-.stat-label {
-    display: block;
-    font-size: 0.65rem;
-    color: var(--color-text-light);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-top: 0.2rem;
-}
-
-.summary-date-range {
-    margin-top: 0.75rem;
-    font-size: 0.72rem;
-    color: var(--color-text-lighter);
     text-align: center;
+    margin-bottom: 0.25rem;
+    white-space: nowrap;
+}
+
+.coverage-bar {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    border-radius: 4px;
+    min-width: 3px;
+}
+
+.coverage-bar-bb {
+    background: #3b82f6;
+}
+
+.coverage-bar-ecom {
+    background: #8b5cf6;
+}
+
+.coverage-dates {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.6rem;
+    color: var(--color-text-light);
+    margin-top: 0.2rem;
+    padding: 0 2px;
+}
+
+.coverage-empty {
+    text-align: center;
+    font-size: 0.82rem;
+    color: var(--color-text-lighter);
+    padding: 1.5rem 0;
 }
 
 /* ===== HOME: KPI BUTTONS ===== */
 .home-kpi-buttons {
     max-width: 1100px;
-    margin: 0 auto 2rem;
+    margin: 0 auto 2.5rem;
+    padding-bottom: 2rem;
+    border-bottom: 1px solid var(--color-border);
 }
 
-.kpi-button-row {
+.kpi-button-grid {
     display: flex;
     gap: 0.75rem;
-    flex-wrap: wrap;
 }
 
-.kpi-button {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 0.7rem 1.25rem;
-    background: var(--color-surface);
+.kpi-card-v {
+    display: grid;
+    grid-template-rows: auto 1fr minmax(3.5rem, auto);
+    justify-items: center;
+    aspect-ratio: 3 / 4;
+    min-width: 0;
+    flex: 1;
+    padding: 1rem 0.85rem 0.85rem;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
     border: 1px solid var(--color-border);
     border-radius: var(--radius);
     cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 600;
     color: var(--color-text);
-    transition: all 0.15s;
+    transition: all 0.2s;
+    text-align: center;
+    box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.04),
+        0 1px 2px rgba(0, 0, 0, 0.02),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-.kpi-button:hover {
+.kpi-card-v:hover:not(.disabled) {
     border-color: var(--color-primary);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    box-shadow:
+        0 8px 20px rgba(37, 99, 235, 0.1),
+        0 2px 6px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+    transform: translateY(-3px);
 }
 
-.kpi-button-icon {
-    font-size: 1.25rem;
+.kpi-card-v.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.kpi-card-name {
+    display: block;
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.kpi-card-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    align-self: center;
+}
+
+.kpi-card-icon svg {
+    width: 48px;
+    height: 48px;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.kpi-card-details {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    justify-self: stretch;
+    padding-left: 0.5rem;
+    align-self: end;
+}
+
+.kpi-card-details li {
+    font-size: 0.68rem;
+    color: var(--color-text-light);
+    padding: 0.1rem 0;
+}
+
+.kpi-card-details li::before {
+    content: '·';
+    margin-right: 0.35rem;
+    color: var(--color-text-lighter);
+}
+
+.kpi-card-soon {
+    font-size: 0.65rem;
+    color: var(--color-text-lighter);
+    font-weight: 400;
+    align-self: end;
+}
+
+@media (max-width: 900px) {
+    .kpi-button-grid {
+        flex-wrap: wrap;
+    }
+    .kpi-card-v {
+        flex: 0 0 calc(25% - 0.6rem);
+    }
 }
 
 /* ===== KPI PANEL ===== */
@@ -611,11 +697,9 @@ body {
 }
 
 .evo-chart-container {
-    padding: 0.75rem 0 1rem;
-    height: 280px;
+    padding: 0.75rem 1rem 1rem;
+    height: 300px;
     position: relative;
-    /* Left margin matches the Empleado/Total column, set dynamically via JS */
-    margin-right: 1.25rem;
 }
 
 .evo-chart-section.collapsed {
@@ -645,6 +729,20 @@ body {
     border-radius: var(--radius-sm);
     font-size: 0.75rem;
     text-align: center;
+}
+
+.min-ops-input {
+    width: 52px;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    text-align: center;
+}
+
+.min-ops-input:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
 }
 
 /* Percentage cells */
@@ -725,14 +823,15 @@ body {
 }
 
 .kpi-table {
-    width: 100%;
+    width: auto;
+    margin: 0 auto;
     border-collapse: collapse;
     font-size: 0.82rem;
 }
 
 .kpi-table th {
     text-align: left;
-    padding: 0.6rem 1.25rem;
+    padding: 0.5rem 0.75rem;
     font-weight: 600;
     font-size: 0.7rem;
     text-transform: uppercase;
@@ -740,17 +839,28 @@ body {
     color: var(--color-text-light);
     background: var(--color-bg);
     border-bottom: 1px solid var(--color-border);
+    white-space: nowrap;
 }
 
 .kpi-table td {
-    padding: 0.6rem 1.25rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--color-border-light);
+    white-space: nowrap;
 }
 
-/* Evolution table: center week data columns (not first and not last) */
-#evo-table th:not(:first-child),
-#evo-table td:not(:first-child) {
+/* Evolution tables: center week data columns */
+#evo-table th,
+#evo-table td,
+#cs-table th,
+#cs-table td {
     text-align: center;
+}
+
+#evo-table td:nth-child(2),
+#evo-table td:nth-child(3),
+#cs-table td:nth-child(2),
+#cs-table td:nth-child(3) {
+    text-align: left;
 }
 
 .kpi-table tbody tr:hover {
@@ -758,7 +868,7 @@ body {
 }
 
 .kpi-table tfoot td {
-    padding: 0.6rem 1.25rem;
+    padding: 0.5rem 0.75rem;
     font-weight: 700;
     background: var(--color-bg);
     border-top: 2px solid var(--color-border);
@@ -769,7 +879,7 @@ body {
     cursor: pointer;
     user-select: none;
     position: relative;
-    padding-right: 1.75rem;
+    padding-right: 1.4rem;
 }
 
 .kpi-table th.sortable:hover {
@@ -805,7 +915,32 @@ body {
     color: var(--color-primary);
 }
 
-#evo-table .col-total {
+#evo-table .col-rank,
+#cs-table .col-rank {
+    font-size: 0.68rem;
+    color: var(--color-text-lighter);
+    text-align: center;
+    width: 1.5rem;
+    padding-left: 0.4rem;
+    padding-right: 0.25rem;
+}
+
+#evo-table .dup-mark,
+#cs-table .dup-mark {
+    color: var(--color-primary);
+    font-weight: 700;
+    cursor: help;
+}
+
+#evo-table .col-store,
+#cs-table .col-store {
+    font-size: 0.72rem;
+    color: var(--color-text-light);
+    white-space: nowrap;
+}
+
+#evo-table .col-total,
+#cs-table .col-total {
     background: var(--color-border-light);
 }
 
@@ -1180,6 +1315,22 @@ tr:hover { background: #f8fafc; }
     border-radius: var(--radius-sm);
     font-size: 0.82rem;
     background: var(--color-surface);
+}
+
+.input-date-sm {
+    padding: 0.45rem 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    width: 110px;
+}
+
+.data-date-label {
+    font-size: 0.82rem;
+    color: var(--color-text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
 }
 
 /* Ecom rows in data explorer */

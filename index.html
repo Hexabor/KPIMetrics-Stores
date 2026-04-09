@@ -55,13 +55,67 @@
                 </p>
             </div>
 
+            <!-- KPI BUTTONS -->
+            <div class="home-kpi-buttons">
+                <h4 class="home-col-label">KPIs</h4>
+                <div class="kpi-button-grid">
+                    <button class="kpi-card-v" data-action="go-kpi-crosssell">
+                        <span class="kpi-card-name">Ventas</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg></span>
+                        <ul class="kpi-card-details">
+                            <li>Tickets</li>
+                            <li>Articulos</li>
+                            <li>SV+D1</li>
+                        </ul>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">Compras</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M2 12h20"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                    <button class="kpi-card-v" data-action="go-kpi-mobiles">
+                        <span class="kpi-card-name">Moviles</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
+                        <ul class="kpi-card-details">
+                            <li>Unidades</li>
+                            <li>%Geles</li>
+                            <li>%Basics</li>
+                        </ul>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">Socios</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">KPI 5</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">KPI 6</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">KPI 7</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                    <button class="kpi-card-v disabled" disabled>
+                        <span class="kpi-card-name">KPI 8</span>
+                        <span class="kpi-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+                        <small class="kpi-card-soon">Proximamente</small>
+                    </button>
+                </div>
+            </div>
+
             <!-- Home grid: 3 columns -->
             <div class="home-grid">
 
                 <!-- LEFT COLUMN -->
                 <div class="home-col">
                     <h4 class="home-col-label">DATOS</h4>
-
                     <div class="home-card clickable" data-action="go-import">
                         <div class="home-card-icon import-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -71,72 +125,20 @@
                             <small>Cargar datos de Looker</small>
                         </div>
                     </div>
-
-
-                    <h4 class="home-col-label" style="margin-top:1.5rem;">HISTORIAL</h4>
-                    <div class="home-card">
-                        <div class="home-card-icon history-icon">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        </div>
-                        <div>
-                            <strong>Ultima importacion</strong>
-                            <small id="home-last-import">--</small>
-                        </div>
-                    </div>
                 </div>
 
-                <!-- CENTER COLUMN: Summary -->
+                <!-- CENTER COLUMN: Coverage -->
                 <div class="home-col home-col-center">
+                    <h4 class="home-col-label">COBERTURA</h4>
                     <div class="home-summary-card">
-                        <div class="summary-header">
-                            <h3>Resumen</h3>
-                            <div class="summary-filters">
-                                <select id="home-summary-period">
-                                    <option value="all" selected>Todo</option>
-                                    <option value="current-week">Esta semana</option>
-                                    <option value="last-week">Semana pasada</option>
-                                    <option value="last-4">Ultimas 4 semanas</option>
-                                </select>
-                                <div class="search-select" id="home-summary-store-wrap">
-                                    <input type="text" class="search-select-input" id="home-summary-store" placeholder="Todas las tiendas" value="">
-                                    <div class="search-select-dropdown" id="home-summary-store-list"></div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="summary-stats" id="home-summary-stats">
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-sales">--</span>
-                                <span class="stat-label">Ventas</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-sales-total">--</span>
-                                <span class="stat-label">Total ventas</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-buys">--</span>
-                                <span class="stat-label">Compras</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-buys-total">--</span>
-                                <span class="stat-label">Total compras</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-exchanges">--</span>
-                                <span class="stat-label">Exchanges</span>
-                            </div>
-                            <div class="stat-box">
-                                <span class="stat-value" id="summary-rma">--</span>
-                                <span class="stat-label">RMA</span>
-                            </div>
-                        </div>
-                        <div class="summary-date-range" id="summary-date-range"></div>
+                        <div id="coverage-bars"></div>
+                        <div class="coverage-empty hidden" id="coverage-empty">Sin datos importados</div>
                     </div>
                 </div>
 
                 <!-- RIGHT COLUMN -->
                 <div class="home-col">
-                    <h4 class="home-col-label">ANALISIS</h4>
-
+                    <h4 class="home-col-label">HERRAMIENTAS</h4>
                     <div class="home-card clickable" data-action="go-settings">
                         <div class="home-card-icon settings-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09"/></svg>
@@ -146,7 +148,6 @@
                             <small>Calendario y parametros</small>
                         </div>
                     </div>
-
                     <div class="home-card clickable" data-action="export-json">
                         <div class="home-card-icon export-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
@@ -156,7 +157,6 @@
                             <small>Backup comprimido (.gz)</small>
                         </div>
                     </div>
-
                     <div class="home-card clickable" data-action="import-json">
                         <div class="home-card-icon restore-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -167,9 +167,7 @@
                         </div>
                     </div>
                     <input type="file" id="json-input" accept=".json,.json.gz,.gz" hidden>
-
-                    <h4 class="home-col-label" style="margin-top:1.5rem;">DRIVE</h4>
-                    <div class="home-card disabled" title="Proximamente: sincronizacion con Google Drive">
+                    <div class="home-card disabled" title="Proximamente: sincronizacion con Google Drive" style="margin-top:0.5rem;">
                         <div class="home-card-icon drive-icon">
                             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg>
                         </div>
@@ -178,17 +176,6 @@
                             <small>Proximamente</small>
                         </div>
                     </div>
-                </div>
-            </div>
-
-            <!-- KPI BUTTONS -->
-            <div class="home-kpi-buttons">
-                <h4 class="home-col-label">KPIs</h4>
-                <div class="kpi-button-row">
-                    <button class="kpi-button" data-action="go-kpi-mobiles">
-                        <span class="kpi-button-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg></span>
-                        <span>Moviles</span>
-                    </button>
                 </div>
             </div>
 
@@ -293,6 +280,17 @@
                             <option value="exchange">Exchange</option>
                             <option value="rma">RMA</option>
                         </select>
+                        <select id="data-filter-store"><option value="all">Todas las tiendas</option></select>
+                        <select id="data-filter-category"><option value="all">Todas las categorias</option></select>
+                        <select id="data-filter-channel">
+                            <option value="all">Todos los canales</option>
+                            <option value="ecom">Ecom</option>
+                            <option value="tienda">Tienda</option>
+                        </select>
+                    </div>
+                    <div class="data-toolbar">
+                        <label class="data-date-label">Desde <input type="text" id="data-filter-date-from" placeholder="DD/MM/AAAA" class="input-date-sm"></label>
+                        <label class="data-date-label">Hasta <input type="text" id="data-filter-date-to" placeholder="DD/MM/AAAA" class="input-date-sm"></label>
                         <span class="data-record-count" id="data-record-count"></span>
                     </div>
                     <div id="data-table-container" class="table-container"><table id="data-table"></table></div>
@@ -349,31 +347,38 @@
                         <input type="number" id="evo-week-to" class="week-input" min="1" value="15">
                         <select id="evo-metric">
                             <option value="mobiles">Moviles (uds)</option>
-                            <option value="mobilesTotal">Moviles (total)</option>
-                            <option value="services">Services</option>
+                            <option value="mobilesTotal">Moviles (&euro;)</option>
+                            <option value="services">Protectores de gel</option>
                             <option value="pctServices">% Gel/Movil</option>
                             <option value="basics">Basics</option>
                             <option value="pctBasics">% Basics/Movil</option>
                             <option value="pctCombo">% Combo (gel+basics)/Movil</option>
                         </select>
+                        <input type="number" id="evo-min-ops" class="min-ops-input" min="1" value="10" placeholder="Min" title="Minimo de moviles para incluir en ranking" disabled>
                         <select id="evo-scope">
                             <option value="staff">Por empleado</option>
-                            <option value="total">Total tienda</option>
+                            <option value="store">Por tienda</option>
                         </select>
                         <select id="evo-top-n">
                             <option value="all" selected>Todos</option>
                             <option value="3">Top 3</option>
                             <option value="5">Top 5</option>
                             <option value="10">Top 10</option>
+                            <option value="20">Top 20</option>
                         </select>
                         <div class="search-select" id="kpi-panel-store-wrap">
                             <input type="text" class="search-select-input" id="kpi-panel-store" placeholder="Todas las tiendas" value="">
                             <div class="search-select-dropdown" id="kpi-panel-store-list"></div>
                         </div>
                         <label class="toggle-switch" title="Excluir ordenes e-commerce">
-                            <input type="checkbox" id="evo-exclude-ecom">
+                            <input type="checkbox" id="evo-exclude-ecom" checked>
                             <span class="toggle-slider"></span>
-                            <span class="toggle-label">Solo tienda</span>
+                            <span class="toggle-label">Filtrar ecom</span>
+                        </label>
+                        <label class="toggle-switch" title="Unificar empleados que aparecen en varias tiendas">
+                            <input type="checkbox" id="evo-merge-stores">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Unificar</span>
                         </label>
                     </div>
                 </div>
@@ -405,6 +410,85 @@
                 <div class="evo-chart-section collapsed" id="evo-chart-section">
                     <div class="evo-chart-container">
                         <canvas id="evo-chart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- VENTA COMPLEMENTARIA -->
+        <section id="section-kpi-crosssell" class="section hidden">
+            <div class="section-header">
+                <h2>Ventas</h2>
+                <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
+            </div>
+
+            <div class="kpi-panel">
+                <div class="kpi-panel-header">
+                    <h3 class="kpi-panel-title">Evolucion semanal</h3>
+                    <div class="kpi-panel-filters">
+                        <label class="filter-label">De W</label>
+                        <input type="number" id="cs-week-from" class="week-input" min="1" value="1">
+                        <label class="filter-label">a W</label>
+                        <input type="number" id="cs-week-to" class="week-input" min="1" value="15">
+                        <select id="cs-metric">
+                            <option value="totalItems">Articulos vendidos</option>
+                            <option value="revenue">Facturacion (&euro;)</option>
+                            <option value="totalTickets">Tickets totales</option>
+                            <option value="multiCount">Ventas multiples</option>
+                            <option value="pctMulti">% Venta complementaria</option>
+                            <option value="avgItems">Media articulos/ticket</option>
+                        </select>
+                        <input type="number" id="cs-min-ops" class="min-ops-input" min="1" value="10" placeholder="Min" title="Minimo de tickets para incluir en ranking" disabled>
+                        <select id="cs-scope">
+                            <option value="staff">Por empleado</option>
+                            <option value="store">Por tienda</option>
+                        </select>
+                        <select id="cs-top-n">
+                            <option value="all" selected>Todos</option>
+                            <option value="3">Top 3</option>
+                            <option value="5">Top 5</option>
+                            <option value="10">Top 10</option>
+                            <option value="20">Top 20</option>
+                        </select>
+                        <div class="search-select" id="cs-store-wrap">
+                            <input type="text" class="search-select-input" id="cs-store" placeholder="Todas las tiendas" value="">
+                            <div class="search-select-dropdown" id="cs-store-list"></div>
+                        </div>
+                        <label class="toggle-switch" title="Excluir ordenes e-commerce">
+                            <input type="checkbox" id="cs-exclude-ecom" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Filtrar ecom</span>
+                        </label>
+                        <label class="toggle-switch" title="Unificar empleados que aparecen en varias tiendas">
+                            <input type="checkbox" id="cs-merge-stores">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Unificar</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="kpi-panel-week-range" id="cs-week-range"></div>
+
+                <div class="kpi-panel-body">
+                    <div class="table-container">
+                        <table class="kpi-table" id="cs-table">
+                            <thead id="cs-thead"><tr><th>--</th></tr></thead>
+                            <tbody id="cs-tbody">
+                                <tr><td class="empty-msg">Selecciona semanas para ver la evolucion.</td></tr>
+                            </tbody>
+                            <tfoot id="cs-tfoot"></tfoot>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="evo-chart-toggle">
+                    <button class="btn btn-secondary btn-sm" id="btn-toggle-cs-chart">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                        Grafico
+                    </button>
+                </div>
+                <div class="evo-chart-section collapsed" id="cs-chart-section">
+                    <div class="evo-chart-container">
+                        <canvas id="cs-chart"></canvas>
                     </div>
                 </div>
             </div>

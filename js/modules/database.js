@@ -219,38 +219,79 @@ const Database = (() => {
         return { from: first.date, to: last.date };
     }
 
+    async function getDateRangeBySource() {
+        const result = {};
+
+        // Baby Banking: from operations table
+        const bbSorted = await db.operations.where('source').equals('baby-banking').sortBy('date');
+        if (bbSorted.length > 0) {
+            const first = bbSorted.find(r => r.date);
+            const last = [...bbSorted].reverse().find(r => r.date);
+            if (first && last) result['baby-banking'] = { from: first.date, to: last.date };
+        }
+
+        // Ecom: from imports table (ecom records aren't stored in operations)
+        const ecomImports = await db.imports.where('source').equals('ecom').toArray();
+        if (ecomImports.length > 0) {
+            const froms = ecomImports.map(i => i.dateFrom).filter(Boolean).sort();
+            const tos = ecomImports.map(i => i.dateTo).filter(Boolean).sort();
+            if (froms.length && tos.length) {
+                result['ecom'] = { from: froms[0], to: tos[tos.length - 1] };
+            }
+        }
+
+        return result;
+    }
+
     async function getDistinctValues(field) {
         return db.operations.orderBy(field).uniqueKeys();
     }
 
     async function queryOperations(filters = {}, page = 1, pageSize = 50) {
-        let collection = db.operations.toCollection();
+        const filterFns = [];
 
         if (filters.type && filters.type !== 'all') {
-            collection = db.operations.where('type').equalsIgnoreCase(filters.type);
+            const t = filters.type.toLowerCase();
+            filterFns.push(r => r.type && r.type.toLowerCase() === t);
         }
-
         if (filters.store && filters.store !== 'all') {
-            collection = db.operations.where('store').equals(filters.store);
+            filterFns.push(r => r.store === filters.store);
         }
-
-        const total = await collection.count();
-        const records = await collection
-            .offset((page - 1) * pageSize)
-            .limit(pageSize)
-            .toArray();
-
-        let filtered = records;
+        if (filters.category && filters.category !== 'all') {
+            filterFns.push(r => r.category === filters.category);
+        }
+        if (filters.channel && filters.channel !== 'all') {
+            const ch = filters.channel;
+            filterFns.push(r => (r.channel || 'tienda') === ch);
+        }
+        if (filters.dateFrom) {
+            filterFns.push(r => r.date >= filters.dateFrom);
+        }
+        if (filters.dateTo) {
+            filterFns.push(r => r.date <= filters.dateTo);
+        }
         if (filters.search) {
             const term = filters.search.toLowerCase();
-            filtered = records.filter(r =>
-                Object.values(r).some(v =>
-                    String(v).toLowerCase().includes(term)
-                )
-            );
+            filterFns.push(r => Object.values(r).some(v => String(v).toLowerCase().includes(term)));
         }
 
-        return { records: filtered, total, page, pageSize };
+        const hasFilters = filterFns.length > 0;
+        const matchFn = r => filterFns.every(fn => fn(r));
+
+        // Get all matching records, then sort and paginate in memory
+        let all;
+        if (hasFilters) {
+            all = await db.operations.filter(matchFn).toArray();
+        } else {
+            all = await db.operations.toArray();
+        }
+        all.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+        const total = all.length;
+        const start = (page - 1) * pageSize;
+        const records = all.slice(start, start + pageSize);
+
+        return { records, total, page, pageSize };
     }
 
     async function getOperationsForKPI(filters = {}) {
@@ -299,8 +340,10 @@ const Database = (() => {
     }
 
     async function clearAll() {
-        await db.operations.clear();
-        await db.imports.clear();
+        db.close();
+        await Dexie.delete('KPITool2026');
+        init();
+        await db.open();
     }
 
     return {
@@ -312,6 +355,7 @@ const Database = (() => {
         getEcomCoverage,
         getRecordCount,
         getDateRange,
+        getDateRangeBySource,
         getDistinctValues,
         queryOperations,
         getOperationsForKPI,

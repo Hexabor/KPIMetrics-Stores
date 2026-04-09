@@ -4,6 +4,26 @@
  */
 const Changelog = [
     {
+        date: '09/04/2026 (sesion 4)',
+        items: [
+            { type: 'new', text: 'KPI Ventas: tickets, articulos, facturacion, ventas multiples, % venta complementaria, media articulos/ticket' },
+            { type: 'new', text: 'Home rediseñado: cards verticales 3:4 con icono, nombre y listado de metricas' },
+            { type: 'new', text: 'Cobertura de datos en Home: barras por fuente (Baby Banking, Ecom) con fechas' },
+            { type: 'new', text: 'Columna Tienda en tablas de evolucion con indicador de empleados multi-tienda (*)' },
+            { type: 'new', text: 'Switch Unificar: fusiona apariciones del mismo empleado en varias tiendas' },
+            { type: 'new', text: 'Columna de ranking (#) en todas las tablas de KPIs' },
+            { type: 'new', text: 'Filtro minimo de operaciones para metricas porcentuales (configurable)' },
+            { type: 'new', text: 'Heatmap gradual azul en celdas de metricas absolutas' },
+            { type: 'new', text: 'Verificar datos: filtros por tienda, categoria, canal, fechas' },
+            { type: 'new', text: 'Top 20 en selector de ranking' },
+            { type: 'new', text: 'Scope "Por tienda" reemplaza "Total tienda" en evolucion' },
+            { type: 'fix', text: 'Restablecer herramienta ahora borra la BD completamente (Dexie.delete)' },
+            { type: 'fix', text: 'Importador filtra departamentos no-tienda (RMA, Ecomdistribution, Ecommerce)' },
+            { type: 'fix', text: 'Totales de facturacion en Ventas calculados correctamente' },
+            { type: 'fix', text: 'Filtrar ecom activado por defecto' },
+        ]
+    },
+    {
         date: '08/04/2026 (sesion 3)',
         items: [
             { type: 'new', text: 'Importador Ecom Sales activo: cruza ordenes ecom con Baby Banking y marca canal (ecom/tienda)' },

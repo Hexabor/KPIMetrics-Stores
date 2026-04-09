@@ -176,6 +176,14 @@ const CSVParser = (() => {
             return null;
         }
 
+        // Discard non-store departments (RMA centres, ecom warehouses)
+        if (record.store) {
+            const s = record.store.trim().toLowerCase();
+            if (s.includes('rma') || s === 'es ecomdistribution' || s === 'es ecommerce') {
+                return null;
+            }
+        }
+
         // Normalize date: "3 Apr 2026, 21:54:58" -> "2026-04-03"
         if (record.date) {
             record.date = normalizeDate(record.date);
