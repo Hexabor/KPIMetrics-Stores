@@ -1,6 +1,6 @@
-# CapiMetrics 2026 - Normas de desarrollo
+# KPI Metrix 2026 - Normas de desarrollo
 
-> Nombre interno (DB Dexie, backup folder de Drive) se mantiene como "KPITool2026" por compatibilidad con datos existentes. Solo el nombre visible cambia a "CapiMetrics 2026".
+> Nombre interno (DB Dexie, backup folder de Drive) se mantiene como "KPITool2026" por compatibilidad con datos existentes. El nombre visible es "KPI Metrix 2026" (originalmente "KPI Tool 2026", luego "CapiMetrics 2026").
 
 ## Formato de fechas
 - Todos los campos de fecha visibles al usuario deben mostrarse en formato **DD/MM/AAAA**

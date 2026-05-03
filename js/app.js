@@ -1,5 +1,5 @@
 /**
- * CapiMetrics 2026 - Main Application Controller
+ * KPI Metrix 2026 - Main Application Controller
  */
 const App = (() => {
     let currentPreviewData = null;
@@ -61,7 +61,7 @@ const App = (() => {
 
         updateTopbarWeek();
 
-        console.log('CapiMetrics 2026 initialized');
+        console.log('KPI Metrix 2026 initialized');
     }
 
     // ============================
@@ -2492,7 +2492,7 @@ const App = (() => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `capimetrics_export_${datePart}_${timePart}.json.gz`;
+        a.download = `kpimetrix_export_${datePart}_${timePart}.json.gz`;
         a.click();
         URL.revokeObjectURL(url);
 
