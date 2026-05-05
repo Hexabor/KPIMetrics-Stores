@@ -164,7 +164,7 @@
                                 <span class="info-pop-section">Que se descarta al importar</span>
                                 <ul>
                                     <li>Branch que contenga <em>RMA</em>, <em>ES Ecomdistribution</em> o <em>ES Ecommerce</em> (no son tiendas fisicas)</li>
-                                    <li>Type = <em>Transfer</em> (movimientos internos de stock y ordenes de test)</li>
+                                    <li>Type = <em>Transfer</em> (movimientos internos de stock). <strong>Excepcion</strong>: las filas Transfer cuya categoria es <em>Test</em>/<em>TEST</em> SI se importan, como admisiones a test (ver KPIs <em>Ordenes de test</em>, <em>Items admitidos</em> y <em>Ratio de ordenes de test</em>)</li>
                                 </ul>
                                 <span class="info-pop-section">Campos y duplicados</span>
                                 <span>Solo se guardan campos relevantes para KPIs. Si reimportas un archivo, las filas que ya existian se detectan por Order Number + precio + categoria y se omiten.</span>
@@ -191,7 +191,7 @@
                                 <span class="info-pop-section">Que se descarta al importar</span>
                                 <ul>
                                     <li>Branch que contenga <em>RMA</em>, <em>ES Ecomdistribution</em> o <em>ES Ecommerce</em> (no son tiendas fisicas)</li>
-                                    <li>Type = <em>Transfer</em> (movimientos internos de stock y ordenes de test)</li>
+                                    <li>Type = <em>Transfer</em> (movimientos internos de stock). <strong>Excepcion</strong>: las filas Transfer cuya categoria es <em>Test</em>/<em>TEST</em> SI se importan, como admisiones a test (ver KPIs <em>Ordenes de test</em>, <em>Items admitidos</em> y <em>Ratio de ordenes de test</em>)</li>
                                 </ul>
                                 <span class="info-pop-section">Campos y duplicados</span>
                                 <span>Solo se guardan campos relevantes para KPIs. Si reimportas un archivo, las filas que ya existian se detectan por Order Number + precio + categoria y se omiten.</span>
@@ -326,6 +326,7 @@
                             <option value="exchange">Exchange</option>
                             <option value="rma">RMA</option>
                             <option value="membership">Captacion de socios</option>
+                            <option value="test-admission">Admision a test</option>
                         </select>
                         <select id="data-filter-store"><option value="all">Todas las tiendas</option></select>
                         <select id="data-filter-category"><option value="all">Todas las categorias</option></select>
@@ -404,6 +405,32 @@
                     </div>
                 </details>
             </div>
+            <div class="settings-group settings-deep">
+                <h3>Limpiar datos por fuente <span class="settings-deep-badge">configuracion profunda</span></h3>
+                <p class="settings-warning">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:0.25rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <strong>Operacion irreversible</strong>. Borra los datos importados de una fuente concreta sin afectar a las demas ni a la configuracion.
+                    <strong>Antes de tocar nada</strong>, exporta un backup JSON desde el inicio (icono de descarga) por si necesitas volver atras.
+                </p>
+                <details class="alias-details">
+                    <summary>Mostrar fuentes</summary>
+                    <p>Para "Ecom Sales" no hay filas propias en la base de datos: las ordenes ecom se reconocen marcando filas de Baby Banking. Limpiar Ecom <em>desetiqueta</em> esas filas (vuelven a contar como tienda) y borra el historial de importaciones de Ecom.</p>
+                    <table class="alias-table">
+                        <thead>
+                            <tr>
+                                <th>Fuente</th>
+                                <th>Filas</th>
+                                <th>Importaciones</th>
+                                <th>Rango</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cleanup-source-tbody">
+                            <tr><td colspan="5" class="empty-msg">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </details>
+            </div>
             <div class="settings-group settings-danger">
                 <h3>Restablecer herramienta</h3>
                 <p>Esto eliminara todos los datos importados, el historial de importaciones y la configuracion. La herramienta volvera a su estado inicial.</p>
@@ -460,7 +487,22 @@
                             <optgroup label="Captacion">
                                 <option value="memberships">Socios</option>
                             </optgroup>
+                            <optgroup label="Admision a test">
+                                <option value="testOrders">Ordenes de test</option>
+                                <option value="testItems">Items admitidos</option>
+                                <option value="testRatio">Ratio de ordenes de test</option>
+                            </optgroup>
+                            <optgroup label="Operaciones">
+                                <option value="operTotal">Operaciones (total)</option>
+                                <option value="operRefunds">Refunds (n)</option>
+                                <option value="operCashBuys">Cash buys (n)</option>
+                                <option value="operExchanges">Exchanges (n)</option>
+                            </optgroup>
                         </select>
+                        <button type="button" class="info-btn evo-single-only" id="evo-metric-info" aria-label="Informacion del KPI seleccionado">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            <span class="info-pop" id="evo-metric-info-pop"></span>
+                        </button>
                         <div class="multi-select evo-compare-only hidden" data-key="evo-kpis">
                             <button type="button" class="multi-select-trigger" id="evo-kpi-trigger">
                                 <span class="multi-select-label">KPIs</span>

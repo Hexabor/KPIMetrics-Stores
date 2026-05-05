@@ -456,6 +456,114 @@ const Database = (() => {
         await db.open();
     }
 
+    /**
+     * Wipe a single import source from the active database without touching
+     * the others. Operations + import history are removed for that source.
+     *
+     * Special case: 'ecom' has no operations rows of its own — what it does is
+     * tag matching baby-banking rows with channel='ecom'. So clearing 'ecom'
+     * removes its import history and reverts those tags back to 'tienda'.
+     *
+     * Settings (course start, ecom-per-KPI config, captacion aliases) are
+     * NEVER touched.
+     */
+    async function deleteBySource(source, onProgress) {
+        if (!source) return { opsDeleted: 0, importsDeleted: 0, ecomUntagged: 0 };
+
+        // Use filter + primaryKeys + bulkDelete instead of where('source').equals(...).delete().
+        // The source index was added in v5; older imported backups may have rows without
+        // a properly indexed source. The filter approach is bulletproof at the cost of a
+        // full table scan, which is fine here since the cleanup panel is occasional.
+        if (onProgress) onProgress({ phase: 'scan', done: 0, total: 1 });
+        const ids = source === 'ecom'
+            ? await db.operations.filter(r => r.channel === 'ecom').primaryKeys()
+            : await db.operations.filter(r => r.source === source).primaryKeys();
+
+        // Delete in chunks so the UI gets meaningful progress updates and the
+        // event loop has a chance to repaint between batches. 5000 keeps each
+        // bulkDelete short on typical hardware.
+        const BATCH = 5000;
+        let opsDeleted = 0;
+        let ecomUntagged = 0;
+        for (let i = 0; i < ids.length; i += BATCH) {
+            const chunk = ids.slice(i, i + BATCH);
+            if (source === 'ecom') {
+                await db.operations.where('id').anyOf(chunk).modify({ channel: 'tienda' });
+                ecomUntagged += chunk.length;
+                if (onProgress) onProgress({ phase: 'untag', done: ecomUntagged, total: ids.length });
+            } else {
+                await db.operations.bulkDelete(chunk);
+                opsDeleted += chunk.length;
+                if (onProgress) onProgress({ phase: 'delete', done: opsDeleted, total: ids.length });
+            }
+        }
+
+        if (onProgress) onProgress({ phase: 'imports', done: 0, total: 1 });
+        const importIds = await db.imports
+            .filter(imp => imp.source === source)
+            .primaryKeys();
+        const importsDeleted = importIds.length;
+        if (importIds.length) {
+            await db.imports.bulkDelete(importIds);
+        }
+
+        if (opsDeleted > 0 || ecomUntagged > 0) invalidateOpsCache();
+        return { opsDeleted, importsDeleted, ecomUntagged };
+    }
+
+    /**
+     * Summary of what is currently stored, broken down by source. Used by
+     * the cleanup panel in Configuracion to show what is at stake before
+     * the user wipes a source.
+     */
+    async function getStorageSummaryBySource() {
+        const ops = await getAllOperations();
+        const counts = {};        // source -> rowCount
+        const dateMin = {};
+        const dateMax = {};
+        let ecomTaggedCount = 0;
+
+        for (const r of ops) {
+            const src = r.source || 'unknown';
+            counts[src] = (counts[src] || 0) + 1;
+            if (r.date) {
+                if (!dateMin[src] || r.date < dateMin[src]) dateMin[src] = r.date;
+                if (!dateMax[src] || r.date > dateMax[src]) dateMax[src] = r.date;
+            }
+            if (r.channel === 'ecom') ecomTaggedCount++;
+        }
+
+        // Ecom has no rows of its own; surface its presence via imports +
+        // the count of currently-tagged baby-banking rows.
+        const allImports = await db.imports.toArray();
+        const importCountBySource = {};
+        const importDateMin = {};
+        const importDateMax = {};
+        for (const imp of allImports) {
+            const src = imp.source || 'unknown';
+            importCountBySource[src] = (importCountBySource[src] || 0) + 1;
+            if (imp.dateFrom) {
+                if (!importDateMin[src] || imp.dateFrom < importDateMin[src]) importDateMin[src] = imp.dateFrom;
+            }
+            if (imp.dateTo) {
+                if (!importDateMax[src] || imp.dateTo > importDateMax[src]) importDateMax[src] = imp.dateTo;
+            }
+        }
+
+        const allSources = new Set([...Object.keys(counts), ...Object.keys(importCountBySource)]);
+        const result = {};
+        for (const src of allSources) {
+            result[src] = {
+                rowCount: counts[src] || 0,
+                importCount: importCountBySource[src] || 0,
+                dateFrom: dateMin[src] || importDateMin[src] || null,
+                dateTo: dateMax[src] || importDateMax[src] || null,
+                ecomTaggedCount: src === 'ecom' ? ecomTaggedCount : 0
+            };
+        }
+        return result;
+    }
+
     return {
         init,
         getAllOperations,
@@ -479,6 +587,8 @@ const Database = (() => {
         setSetting,
         exportAll,
         importAll,
-        clearAll
+        clearAll,
+        deleteBySource,
+        getStorageSummaryBySource
     };
 })();

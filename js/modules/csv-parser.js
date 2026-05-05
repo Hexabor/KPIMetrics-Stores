@@ -167,7 +167,9 @@ const CSVParser = (() => {
      * Only keeps fields needed for KPIs: reference, type, category,
      * date, store, staff, quantity, price, total.
      * Discards: product, serial, sku, till, _raw.
-     * Discards rows of type transfer (stock internal moves).
+     * Discards rows of type transfer (stock internal moves), EXCEPT those
+     * with category "Test"/"TEST" — those are test admissions and we
+     * remap their type to 'test-admission' so they survive the discard.
      * Refunds ARE kept now (needed for net sales = gross - refunds).
      */
     function mapRecord(raw, mapping, source) {
@@ -216,9 +218,17 @@ const CSVParser = (() => {
             record.type = record.type.trim().toLowerCase();
         }
 
-        // Discard transfers (internal stock moves, not relevant for sales/buys KPIs)
+        // Transfers: by default they are discarded (internal stock moves).
+        // Exception: rows whose category is "Test" (any case) are admissions
+        // to test — we keep them under a distinct type 'test-admission' so
+        // every existing filter that excludes 'transfer' keeps ignoring them.
         if (record.type === 'transfer') {
-            return null;
+            const cat = (record.category || '').trim().toLowerCase();
+            if (cat === 'test') {
+                record.type = 'test-admission';
+            } else {
+                return null;
+            }
         }
 
         // Discard non-store departments (RMA centres, ecom warehouses).

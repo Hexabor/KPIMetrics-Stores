@@ -133,8 +133,14 @@ const App = (() => {
         document.getElementById('evo-metric').addEventListener('change', () => {
             const m = document.getElementById('evo-metric').value;
             document.getElementById('evo-min-ops').disabled = !METRICS[m]?.isPct;
+            updateEvoMetricInfo();
             refreshEvolution();
         });
+        // Info popover next to the KPI dropdown: rebuilt each time the
+        // selection changes so the description matches the active metric.
+        // bindInfoPopoverFlip() at init covers the trigger; updateEvoMetricInfo
+        // populates the popover content from DG_COLUMN_LABELS on first paint.
+        updateEvoMetricInfo();
         document.getElementById('evo-min-ops').addEventListener('change', refreshEvolution);
         document.getElementById('evo-scope').addEventListener('change', () => {
             updateEvoScopeVisibility();
@@ -483,20 +489,57 @@ const App = (() => {
             services: 0, servicesNoEcom: 0,
             basics: 0, basicsNoEcom: 0,
             cashBuyAmount: 0, exchangeAmount: 0,
-            memberships: 0
+            memberships: 0,
+            // Admision a test: testOrderRefs counts distinct Order Numbers
+            // with type='test-admission'; testItems sums quantity.
+            testOrderRefs: {}, testItems: 0,
+            // Operation refs: distinct Order Numbers per non-sale counter type.
+            // counterRefs = union of all five counter types (sale + cash buy +
+            // exchange + refund + test-admission). Sale operations are already
+            // tracked via ticketRefs; we don't duplicate them here.
+            // These sets are populated regardless of attribution mode — what
+            // changes between staff and store is the monetary accumulation
+            // (cashBuyAmount / exchangeAmount / refundAmount), not the ref sets.
+            refundOrderRefs: {}, cashBuyOrderRefs: {}, exchangeOrderRefs: {},
+            counterRefs: {}
         };
     }
 
-    function addToBucket(b, r) {
+    /**
+     * Add a record to a bucket.
+     *
+     * `attribution` controls the historical convention that cash buy / exchange
+     * / refund EUR amounts are NOT charged to the staff that registered them
+     * (only sales and test admissions are staff-attributable in this project).
+     *   - 'store' (default): every type accumulates everything
+     *   - 'staff':           cash buy / exchange / refund suppress monetary
+     *                        accumulation, but still contribute their Order
+     *                        Number to the operation ref sets so we can count
+     *                        operations per type at the staff level.
+     *
+     * Net effect on existing staff metrics: zero. tickets/saleRevenue/refundAmount/
+     * cashBuyAmount/exchangeAmount at staff level keep behaving as before.
+     */
+    function addToBucket(b, r, attribution) {
+        const isStaff = attribution === 'staff';
         const total = r.total || 0;
         const qty = r.quantity || 0;
         const catLower = (r.category || '').toLowerCase();
         const isEcom = r.channel === 'ecom';
+        const ref = r.reference || `_noref_${r.id || Math.random()}`;
+        // Counter operations (sale | cash buy | exchange | refund | test-admission)
+        // all contribute their Order Number to counterRefs (denominator of the
+        // test ratio). Memberships are excluded.
+        const isCounter = r.type === 'sale' || r.type === 'refund' ||
+                          r.type === 'cash buy' || r.type === 'exchange' ||
+                          r.type === 'test-admission';
+        if (isCounter) {
+            b.counterRefs[ref] = true;
+        }
         if (r.type === 'sale') {
             if ((r.price || 0) > 0) {
                 b.saleRevenue += total;
                 b.saleUnits += qty;
-                const ref = r.reference || `_noref_${r.id || Math.random()}`;
                 b.ticketRefs[ref] = (b.ticketRefs[ref] || 0) + 1;
                 if (!isEcom) {
                     b.saleRevenueNoEcom += total;
@@ -517,15 +560,23 @@ const App = (() => {
                 if (!isEcom) b.basicsNoEcom += qty;
             }
         } else if (r.type === 'refund') {
-            b.refundAmount += Math.abs(total);
-            if (!isEcom) b.refundAmountNoEcom += Math.abs(total);
+            b.refundOrderRefs[ref] = true;
+            if (!isStaff) {
+                b.refundAmount += Math.abs(total);
+                if (!isEcom) b.refundAmountNoEcom += Math.abs(total);
+            }
         } else if (r.type === 'cash buy') {
-            b.cashBuyAmount += Math.abs(total);
+            b.cashBuyOrderRefs[ref] = true;
+            if (!isStaff) b.cashBuyAmount += Math.abs(total);
         } else if (r.type === 'exchange') {
-            b.exchangeAmount += Math.abs(total);
+            b.exchangeOrderRefs[ref] = true;
+            if (!isStaff) b.exchangeAmount += Math.abs(total);
         } else if (r.type === 'membership') {
             // Each row is one captured member; ecom flag is irrelevant here
             b.memberships += 1;
+        } else if (r.type === 'test-admission') {
+            b.testOrderRefs[ref] = true;
+            b.testItems += qty;
         }
     }
 
@@ -553,6 +604,22 @@ const App = (() => {
         dst.cashBuyAmount += src.cashBuyAmount;
         dst.exchangeAmount += src.exchangeAmount;
         dst.memberships += src.memberships || 0;
+        if (src.testOrderRefs) {
+            for (const ref of Object.keys(src.testOrderRefs)) dst.testOrderRefs[ref] = true;
+        }
+        dst.testItems += src.testItems || 0;
+        if (src.refundOrderRefs) {
+            for (const ref of Object.keys(src.refundOrderRefs)) dst.refundOrderRefs[ref] = true;
+        }
+        if (src.cashBuyOrderRefs) {
+            for (const ref of Object.keys(src.cashBuyOrderRefs)) dst.cashBuyOrderRefs[ref] = true;
+        }
+        if (src.exchangeOrderRefs) {
+            for (const ref of Object.keys(src.exchangeOrderRefs)) dst.exchangeOrderRefs[ref] = true;
+        }
+        if (src.counterRefs) {
+            for (const ref of Object.keys(src.counterRefs)) dst.counterRefs[ref] = true;
+        }
     }
 
     // Field picker: returns NoEcom version when the metric filters ecom.
@@ -583,7 +650,9 @@ const App = (() => {
         mobiles: true, mobilesTotal: true, services: true, pctServices: true,
         basics: true, pctBasics: true, pctCombo: true,
         buys: false, cashBuys: false, exchanges: false, pctVale: false,  // inert (no ecom variant)
-        memberships: false  // inert (captacion is in-store by definition)
+        memberships: false,  // inert (captacion is in-store by definition)
+        testOrders: false, testItems: false, testRatio: false,  // inert (test admissions are in-store)
+        operTotal: false, operRefunds: false, operCashBuys: false, operExchanges: false  // inert (counts of refs)
     };
     const ECOM_CONFIG = { ...ECOM_DEFAULTS };
     // Families for the Settings UI. Compras family is excluded (ecom has no effect there).
@@ -815,6 +884,40 @@ const App = (() => {
         // Captacion
         memberships:   { label: 'Socios',
             value: b => b.memberships || 0,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        // Admision a test
+        testOrders:    { label: 'Ordenes de test',
+            value: b => Object.keys(b.testOrderRefs || {}).length,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        testItems:     { label: 'Items admitidos a test',
+            value: b => b.testItems || 0,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        testRatio:     { label: 'Ratio de ordenes de test', isPct: true,
+            minOpsOf: b => Object.keys(b.counterRefs || {}).length,
+            value: b => {
+                const denom = Object.keys(b.counterRefs || {}).length;
+                const num = Object.keys(b.testOrderRefs || {}).length;
+                return denom > 0 ? (num / denom) * 100 : 0;
+            },
+            format: (v, b) => {
+                const denom = Object.keys(b.counterRefs || {}).length;
+                const num = Object.keys(b.testOrderRefs || {}).length;
+                return formatPctDetail(num, denom);
+            } },
+        // Operaciones (Order Numbers unicos por tipo). Una misma orden puede
+        // contener compras y ventas a la vez; cada movimiento suma en su tipo.
+        // Test y refund nunca comparten Order Number con sale, por contrato CeX.
+        operTotal:     { label: 'Operaciones',
+            value: b => Object.keys(b.counterRefs || {}).length,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        operRefunds:   { label: 'Refunds (n)',
+            value: b => Object.keys(b.refundOrderRefs || {}).length,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        operCashBuys:  { label: 'Cash buys (n)',
+            value: b => Object.keys(b.cashBuyOrderRefs || {}).length,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        operExchanges: { label: 'Exchanges (n)',
+            value: b => Object.keys(b.exchangeOrderRefs || {}).length,
             format: v => (v || 0).toLocaleString('es-ES') }
     };
 
@@ -912,11 +1015,31 @@ const App = (() => {
         }
         listEl.innerHTML = filtered.map(k => {
             const checked = evoState.selectedKpis.has(k) ? 'checked' : '';
-            return `<label class="multi-select-option">
+            const lbl = DG_COLUMN_LABELS[k];
+            const tip = lbl ? lbl.title : METRICS[k].label;
+            return `<label class="multi-select-option" title="${escapeHtml(tip)}">
                 <input type="checkbox" data-value="${k}" ${checked}>
                 <span class="multi-select-option-label">${escapeHtml(METRICS[k].label)}</span>
             </label>`;
         }).join('');
+    }
+
+    /**
+     * Refresh the popover next to the single-metric dropdown so it documents
+     * the currently selected KPI. The trigger is a normal .info-btn, the
+     * existing CSS handles the show-on-hover behavior.
+     */
+    function updateEvoMetricInfo() {
+        const select = document.getElementById('evo-metric');
+        const pop = document.getElementById('evo-metric-info-pop');
+        if (!select || !pop) return;
+        const key = select.value;
+        const def = METRICS[key];
+        const lbl = DG_COLUMN_LABELS[key];
+        const titleText = def ? def.label : key;
+        const desc = lbl ? lbl.title : (def ? def.label : '');
+        pop.innerHTML = `<span class="info-pop-title">${escapeHtml(titleText)}</span>
+            <span>${escapeHtml(desc)}</span>`;
     }
 
     function updateEvoKpiUI() {
@@ -1027,7 +1150,14 @@ const App = (() => {
         cashBuys:      { label: 'Cash buys',      title: 'Compras en efectivo' },
         exchanges:     { label: 'Exchanges',      title: 'Compras en vale' },
         pctVale:       { label: '% Vale',         title: '% de compras hechas con vale de tienda (exchange)' },
-        memberships:   { label: 'Socios',         title: 'Socios captados en el rango de semanas' }
+        memberships:   { label: 'Socios',         title: 'Socios captados en el rango de semanas' },
+        testOrders:    { label: 'Ord. test',      title: 'Numero de ordenes de admision a test (Order Numbers unicos con type=test-admission)' },
+        testItems:     { label: 'Items test',     title: 'Suma de Quantity en las filas Transfer/Test (items admitidos a test)' },
+        testRatio:     { label: '% Ord. test',    title: 'Ordenes de test / Operaciones totales (Order Numbers unicos con type sale | cash buy | exchange | refund | test-admission)' },
+        operTotal:     { label: 'Operaciones',    title: 'Operaciones totales: Order Numbers unicos con type sale | cash buy | exchange | refund | test-admission. Una misma orden puede contener compras y ventas; cada tipo cuenta una vez en su propia metrica' },
+        operRefunds:   { label: 'Refunds (n)',    title: 'Numero de operaciones de refund (Order Numbers unicos con type=refund)' },
+        operCashBuys:  { label: 'Cash buys (n)',  title: 'Numero de operaciones de cash buy (Order Numbers unicos con type=cash buy)' },
+        operExchanges: { label: 'Exchanges (n)',  title: 'Numero de operaciones de exchange (Order Numbers unicos con type=exchange)' }
     };
 
     // Dashboard: Detail state (sort + multi-select filters + grouping + axis)
@@ -1123,17 +1253,20 @@ const App = (() => {
         // Compare-KPIs branch: aggregate one bucket per week for the fixed subject
         if (evoState.compareMode) {
             evoState.compareWeekData = {};
+            const attribution = evoState.scope === 'staff' ? 'staff' : 'store';
             for (const r of records) {
                 const wk = r.week;
                 if (wk < weekFrom || wk > weekTo) continue;
                 if (evoState.scope === 'staff') {
-                    // Filter to the selected staff; exclude types not attributable to staff
                     if ((r.staff || 'N/A') !== compareSubject) continue;
-                    if (r.type === 'cash buy' || r.type === 'exchange' || r.type === 'refund') continue;
                 }
-                // scope=store: records already filtered by store above
+                // scope=store: records already filtered by store above.
+                // Cash buy / exchange / refund EUR amounts are suppressed at
+                // staff level by addToBucket(attribution='staff'); their Order
+                // Numbers still feed counterRefs / per-type ref sets so we can
+                // count operations.
                 if (!evoState.compareWeekData[wk]) evoState.compareWeekData[wk] = emptyBucket();
-                addToBucket(evoState.compareWeekData[wk], r);
+                addToBucket(evoState.compareWeekData[wk], r, attribution);
             }
             renderCompareKPIs();
             return;
@@ -1142,14 +1275,15 @@ const App = (() => {
         evoState.staffWeekData = {};
         evoState.staffStore = {};
         const nameStores = {};
+        const attribution = evoState.scope === 'staff' ? 'staff' : 'store';
         for (const r of records) {
             const wk = r.week;
             if (wk < weekFrom || wk > weekTo) continue;
-            // Compras agregan a la tienda, no al empleado (no se atribuyen a staff).
-            // Para scope=staff descartamos cash buy/exchange/refund.
-            if (evoState.scope === 'staff' && (r.type === 'cash buy' || r.type === 'exchange' || r.type === 'refund')) {
-                continue;
-            }
+            // No record-level filter by type: addToBucket(..., 'staff') suppresses
+            // cash buy / exchange / refund EUR at staff level while still feeding
+            // their refs to counterRefs and per-type ref sets (so the operation-
+            // count metrics work). All staff-attributable monetary fields keep
+            // matching the previous behavior.
 
             const staffName = r.staff || 'N/A';
             const storeName = r.store || '?';
@@ -1165,7 +1299,7 @@ const App = (() => {
 
             if (!evoState.staffWeekData[key]) evoState.staffWeekData[key] = {};
             if (!evoState.staffWeekData[key][wk]) evoState.staffWeekData[key][wk] = emptyBucket();
-            addToBucket(evoState.staffWeekData[key][wk], r);
+            addToBucket(evoState.staffWeekData[key][wk], r, attribution);
         }
 
         // Track names that appear in multiple stores
@@ -1293,6 +1427,8 @@ const App = (() => {
 
         tbody.innerHTML = selectedKeys.map(mk => {
             const def = METRICS[mk];
+            const lbl = DG_COLUMN_LABELS[mk];
+            const tooltip = lbl ? lbl.title : def.label;
             const rawVals = weekBuckets.map(b => {
                 if (!b) return null;
                 if (def.isPct && def.minOpsOf && def.minOpsOf(b) === 0) return null;
@@ -1307,7 +1443,7 @@ const App = (() => {
             for (const b of weekBuckets) if (b) mergeBuckets(totalBucket, b);
             const totalCell = def.format(def.value(totalBucket), totalBucket);
             return `<tr>
-                <td class="evo-kpi-name">${escapeHtml(def.label)}</td>
+                <td class="evo-kpi-name" title="${escapeHtml(tooltip)}">${escapeHtml(def.label)}</td>
                 <td class="col-spark">${spark}</td>
                 ${cells}
                 <td class="col-total"><strong>${totalCell}</strong></td>
@@ -2121,11 +2257,115 @@ const App = (() => {
 
         renderEcomConfigUI();
         await renderAliasEditor();
+        await renderCleanupSourcePanel();
 
         if (DriveSync.isConnected()) {
             const info = await DriveSync.getBackupInfo();
             UI.updateDriveStatus(info ? `Conectado. Ultimo backup: ${info.lastModified}` : 'Conectado.');
         }
+    }
+
+    // ============================
+    // CLEANUP BY SOURCE (Configuracion profunda)
+    // ============================
+    // Wipe a single import source from the active DB without affecting the
+    // others or the configuration. Settings (course start, ecom-per-KPI,
+    // captacion aliases) are never touched.
+    async function renderCleanupSourcePanel() {
+        const tbody = document.getElementById('cleanup-source-tbody');
+        if (!tbody) return;
+
+        const summary = await Database.getStorageSummaryBySource();
+
+        // Show a fixed list of known sources first (so the panel is consistent
+        // even when one source has 0 rows), followed by any unknown ones we
+        // happen to find. Stocks/attachment are skipped: no importer yet.
+        const knownOrder = ['baby-banking', 'baby-banking-ic', 'ecom', 'captacion'];
+        const knownSet = new Set(knownOrder);
+        const extraSources = Object.keys(summary).filter(s => !knownSet.has(s)).sort();
+        const ordered = [...knownOrder, ...extraSources];
+
+        const rows = ordered.map(src => {
+            const info = summary[src] || { rowCount: 0, importCount: 0, dateFrom: null, dateTo: null, ecomTaggedCount: 0 };
+            const label = SOURCE_LABELS[src] || src;
+            const hasData = info.rowCount > 0 || info.importCount > 0 || info.ecomTaggedCount > 0;
+            const range = info.dateFrom && info.dateTo
+                ? `${UI.formatDate(info.dateFrom)} — ${UI.formatDate(info.dateTo)}`
+                : '--';
+            // For ecom we show the tagged-rows count instead of rowCount
+            // (ecom has no rows of its own).
+            const rowsCell = src === 'ecom'
+                ? `<span title="Filas de Baby Banking marcadas como ecom">${info.ecomTaggedCount.toLocaleString('es-ES')} marcadas</span>`
+                : info.rowCount.toLocaleString('es-ES');
+            const btn = hasData
+                ? `<button type="button" class="alias-btn alias-btn-danger" data-cleanup-source="${escapeHtml(src)}">Eliminar</button>`
+                : `<button type="button" class="alias-btn" disabled title="No hay datos de esta fuente">Sin datos</button>`;
+            return `<tr>
+                <td>${escapeHtml(label)}</td>
+                <td>${rowsCell}</td>
+                <td>${info.importCount}</td>
+                <td>${range}</td>
+                <td>${btn}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.innerHTML = rows;
+
+        tbody.querySelectorAll('button[data-cleanup-source]').forEach(btn => {
+            btn.addEventListener('click', () => handleCleanupSource(btn.dataset.cleanupSource, summary[btn.dataset.cleanupSource]));
+        });
+    }
+
+    async function handleCleanupSource(source, info) {
+        const label = SOURCE_LABELS[source] || source;
+        const summary = info || { rowCount: 0, importCount: 0, ecomTaggedCount: 0 };
+        let warnLines;
+        if (source === 'ecom') {
+            warnLines = [
+                `Vas a desetiquetar ${summary.ecomTaggedCount.toLocaleString('es-ES')} filas de Baby Banking marcadas como ecom (volveran a contar como tienda) y a borrar ${summary.importCount} importaciones de "${label}".`,
+                'Esta accion es irreversible salvo restaurando un backup. ¿Continuar?'
+            ];
+        } else {
+            warnLines = [
+                `Vas a borrar ${summary.rowCount.toLocaleString('es-ES')} filas y ${summary.importCount} importaciones de "${label}".`,
+                'El resto de fuentes y la configuracion no se ven afectadas.',
+                'Esta accion es irreversible salvo restaurando un backup. ¿Continuar?'
+            ];
+        }
+        if (!confirm(warnLines.join('\n\n'))) return;
+
+        UI.showProgress(0, 1, `Buscando filas de ${label}...`);
+        try {
+            const result = await Database.deleteBySource(source, ({ phase, done, total }) => {
+                if (phase === 'scan') {
+                    UI.showProgress(0, 1, `Buscando filas de ${label}...`);
+                } else if (phase === 'delete') {
+                    UI.showProgress(done, total, `Eliminando ${label}: ${done.toLocaleString('es-ES')} de ${total.toLocaleString('es-ES')}`);
+                } else if (phase === 'untag') {
+                    UI.showProgress(done, total, `Desetiquetando ${label}: ${done.toLocaleString('es-ES')} de ${total.toLocaleString('es-ES')}`);
+                } else if (phase === 'imports') {
+                    UI.showProgress(0, 1, `Borrando historial de importaciones de ${label}...`);
+                }
+            });
+            UI.hideProgress();
+            const msg = source === 'ecom'
+                ? `Limpieza de ${label}: ${result.ecomUntagged.toLocaleString('es-ES')} filas desetiquetadas, ${result.importsDeleted} importaciones borradas`
+                : `Limpieza de ${label}: ${result.opsDeleted.toLocaleString('es-ES')} filas borradas, ${result.importsDeleted} importaciones borradas`;
+            UI.addLog(msg, 'success');
+        } catch (e) {
+            UI.hideProgress();
+            console.error('deleteBySource error:', e);
+            UI.addLog(`Error al limpiar ${label}: ${e.message}`, 'error');
+            return;
+        }
+
+        // Refresh: settings panel itself, home (coverage bars + counters), and
+        // any open dashboard caches that read getAllOperations.
+        await renderCleanupSourcePanel();
+        await refreshHome();
+        const count = await Database.getRecordCount();
+        const imports = await Database.getImportHistory();
+        UI.updateSettingsInfo(`${count.toLocaleString()} registros. ${imports.length} importaciones.`);
     }
 
     // ============================
@@ -2512,7 +2752,7 @@ const App = (() => {
         for (const r of records) {
             const store = r.store || '?';
             if (!byStoreBucket[store]) byStoreBucket[store] = emptyBucket();
-            addToBucket(byStoreBucket[store], r);
+            addToBucket(byStoreBucket[store], r, 'store');
         }
         return byStoreBucket;
     }
@@ -3410,9 +3650,12 @@ const App = (() => {
         const allStoresSet = new Set();
 
         for (const r of weekRecords) {
-            // Memberships have no category; they belong to Vista general /
-            // Vista tienda-empleado, not to the category-axis Vista detalle.
-            if (r.type === 'membership') continue;
+            // Memberships and test admissions have no usable product category;
+            // they belong to Vista general / Vista tienda-empleado, not to the
+            // category-axis Vista detalle. (Test admissions all live in a
+            // single bookkeeping category "Test", which would just pollute
+            // the breakdown.)
+            if (r.type === 'membership' || r.type === 'test-admission') continue;
             if (excludeEcom && r.channel === 'ecom') continue;
             const store = r.store || '?';
             const cat = r.category || 'Sin categoria';
