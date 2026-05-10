@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Esquema BBDD — KPI Metrics 2026</title>
+<style>
+  @page {
+    size: A4;
+    margin: 18mm 16mm 18mm 16mm;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: #1f2328;
+    background: #fff;
+  }
+
+  h1, h2, h3, h4 {
+    font-weight: 600;
+    color: #0d1117;
+    margin: 0 0 0.4em 0;
+    page-break-after: avoid;
+  }
+  h1 { font-size: 22pt; letter-spacing: -0.5px; }
+  h2 {
+    font-size: 15pt;
+    margin-top: 1.4em;
+    padding-bottom: 0.25em;
+    border-bottom: 1px solid #d0d7de;
+  }
+  h3 { font-size: 12pt; margin-top: 1.1em; }
+  h4 { font-size: 10.5pt; margin-top: 0.9em; }
+
+  p { margin: 0 0 0.7em 0; }
+  ul, ol { margin: 0 0 0.7em 0; padding-left: 22px; }
+  li { margin-bottom: 0.2em; }
+
+  strong { font-weight: 600; color: #0d1117; }
+
+  /* Cabecera del documento (portada simplificada) */
+  .cover {
+    border-left: 4px solid #1f6feb;
+    padding: 4px 0 4px 14px;
+    margin: 0 0 18px 0;
+  }
+  .cover .title {
+    font-size: 22pt;
+    font-weight: 600;
+    line-height: 1.15;
+    color: #0d1117;
+  }
+  .cover .subtitle {
+    font-size: 12pt;
+    color: #57606a;
+    margin-top: 3px;
+  }
+
+  .meta {
+    display: table;
+    border-collapse: collapse;
+    margin: 8px 0 22px 0;
+    font-size: 9.5pt;
+    width: 60%;
+  }
+  .meta .row { display: table-row; }
+  .meta .k, .meta .v {
+    display: table-cell;
+    padding: 3px 10px 3px 0;
+    color: #57606a;
+  }
+  .meta .k { font-weight: 600; color: #0d1117; width: 80px; }
+  .meta .v { color: #1f2328; }
+
+  hr {
+    border: none;
+    border-top: 1px solid #d0d7de;
+    margin: 18px 0;
+  }
+
+  /* Tablas */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.6em 0 1em 0;
+    font-size: 9.5pt;
+    page-break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  th, td {
+    border: 1px solid #d0d7de;
+    padding: 5px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f6f8fa;
+    font-weight: 600;
+    color: #0d1117;
+  }
+  td code, th code {
+    background: #f6f8fa;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 9pt;
+  }
+
+  /* Code blocks */
+  pre {
+    background: #f6f8fa;
+    border: 1px solid #d0d7de;
+    border-radius: 5px;
+    padding: 10px 12px;
+    overflow: auto;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 8.8pt;
+    line-height: 1.45;
+    page-break-inside: avoid;
+    margin: 0.7em 0;
+  }
+  code {
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 9pt;
+    background: #f6f8fa;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+  pre code {
+    background: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 8.8pt;
+  }
+
+  /* Notas/citas */
+  blockquote {
+    border-left: 3px solid #d0d7de;
+    background: #f6f8fa;
+    margin: 0.7em 0;
+    padding: 8px 14px;
+    color: #1f2328;
+    font-size: 10pt;
+  }
+  blockquote p:last-child { margin-bottom: 0; }
+
+  /* Diagrama relacional ASCII */
+  pre.diagram {
+    background: #fbfdff;
+    border: 1px dashed #b6c2cf;
+    color: #1f2328;
+    font-size: 9pt;
+  }
+
+  .center { text-align: center; }
+  .small { font-size: 9pt; color: #57606a; }
+
+  /* Page breaks */
+  h2 { page-break-before: auto; }
+  h2.break { page-break-before: always; }
+  table, pre { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="title">Esquema de Base de Datos<br>KPI Metrics 2026</div>
+  <div class="subtitle">Propuesta para servidor corporativo &mdash; modelo multi-tienda</div>
+</div>
+
+<div class="meta">
+  <div class="row"><div class="k">Versión</div><div class="v">1.0</div></div>
+  <div class="row"><div class="k">Fecha</div><div class="v">06/05/2026</div></div>
+  <div class="row"><div class="k">Autor</div><div class="v">Arc &mdash; Manager CeX Madrid Islazul</div></div>
+  <div class="row"><div class="k">Estado</div><div class="v">Propuesta inicial para revisión</div></div>
+</div>
+
+<h2>1. Contexto y objetivo</h2>
+<p>KPI Metrics 2026 es la herramienta de analítica de tienda que actualmente corre como aplicación web local (frontend puro + IndexedDB en el navegador). El objetivo de este documento es <strong>definir la estructura de la base de datos centralizada</strong> que permitirá migrar la aplicación a un servidor corporativo y dar acceso a varias tiendas desde una única instalación.</p>
+
+<p>El esquema se ha derivado del modelo de datos en producción local (Dexie/IndexedDB v5), respetando los KPIs y reglas de negocio ya validadas, y se ha extendido para soportar:</p>
+
+<ul>
+  <li><strong>Multi-tienda</strong>: varias tiendas conviven en la misma BBDD; consultas y permisos se segmentan por tienda.</li>
+  <li><strong>Multi-usuario</strong>: gerentes, regional managers y staff con permisos diferenciados.</li>
+  <li><strong>Auditoría</strong>: trazabilidad de quién importó qué y cuándo.</li>
+</ul>
+
+<h2>2. Visión general del modelo</h2>
+<p>El modelo se compone de <strong>6 tablas</strong>:</p>
+
+<table>
+  <thead>
+    <tr><th>Tabla</th><th>Propósito</th><th>Volumen estimado</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>stores</code></td><td>Catálogo maestro de tiendas</td><td>Decenas de filas</td></tr>
+    <tr><td><code>users</code></td><td>Usuarios con acceso al sistema</td><td>Decenas a centenares</td></tr>
+    <tr><td><code>user_stores</code></td><td>Permisos por usuario y tienda (rol)</td><td>Centenares</td></tr>
+    <tr><td><code>operations</code></td><td><strong>Tabla principal</strong>: cada fila es una operación (venta, etc.)</td><td>Millones de filas/año</td></tr>
+    <tr><td><code>imports</code></td><td>Log de cargas de CSV (auditoría)</td><td>Miles de filas/año</td></tr>
+    <tr><td><code>settings</code></td><td>Configuración de la aplicación (clave-valor)</td><td>Decenas de filas</td></tr>
+  </tbody>
+</table>
+
+<p>Relaciones:</p>
+
+<pre class="diagram">stores (1) ──&lt; (N) operations
+stores (1) ──&lt; (N) user_stores &gt;── (N) users
+users  (1) ──&lt; (N) imports
+imports(1) ──&lt; (N) operations</pre>
+
+<h2 class="break">3. Tablas — definición detallada</h2>
+
+<h3>3.1. <code>stores</code> — Catálogo de tiendas</h3>
+<p>Cada fila es una tienda física. Centraliza el nombre canónico de la tienda y permite normalizar las referencias desde otras tablas.</p>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción / Dominio</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>INT UNSIGNED PK auto-inc</td><td>NO</td><td>—</td><td>Identificador interno</td></tr>
+    <tr><td><code>code</code></td><td>VARCHAR</td><td>NO</td><td>10</td><td>Código corto único (ej. <code>ISLZ</code>, <code>YORK</code>)</td></tr>
+    <tr><td><code>name</code></td><td>VARCHAR</td><td>NO</td><td>60</td><td>Nombre canónico (ej. <code>Madrid Islazul</code>)</td></tr>
+    <tr><td><code>region</code></td><td>VARCHAR</td><td>NO</td><td>2</td><td>Dominio cerrado: <code>ES</code> (Península/Baleares), <code>IC</code> (Canarias)</td></tr>
+    <tr><td><code>manager</code></td><td>VARCHAR</td><td>SÍ</td><td>80</td><td>Nombre del manager actual (informativo)</td></tr>
+    <tr><td><code>active</code></td><td>BOOLEAN</td><td>NO</td><td>—</td><td>TRUE si la tienda está operativa</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Auditoría</td></tr>
+    <tr><td><code>updated_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Auditoría</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Restricciones:</strong></p>
+<ul>
+  <li><code>UNIQUE (code)</code> — el código identifica unívocamente a la tienda.</li>
+  <li><code>UNIQUE (name)</code> — para evitar duplicados por errores tipográficos.</li>
+</ul>
+
+<h3>3.2. <code>users</code> — Usuarios del sistema</h3>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción / Dominio</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>INT UNSIGNED PK auto-inc</td><td>NO</td><td>—</td><td>Identificador interno</td></tr>
+    <tr><td><code>email</code></td><td>VARCHAR</td><td>NO</td><td>120</td><td>Email corporativo (login)</td></tr>
+    <tr><td><code>name</code></td><td>VARCHAR</td><td>NO</td><td>80</td><td>Nombre completo</td></tr>
+    <tr><td><code>role</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Dominio cerrado: <code>admin</code>, <code>regional</code>, <code>manager</code>, <code>staff</code>, <code>viewer</code></td></tr>
+    <tr><td><code>active</code></td><td>BOOLEAN</td><td>NO</td><td>—</td><td>TRUE si la cuenta está activa</td></tr>
+    <tr><td><code>last_login</code></td><td>TIMESTAMP</td><td>SÍ</td><td>—</td><td>Última vez que entró</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Auditoría</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Restricciones:</strong> <code>UNIQUE (email)</code>.</p>
+
+<p><strong>Notas sobre roles:</strong></p>
+<ul>
+  <li><code>admin</code>: acceso total (incluido el panel de configuración global).</li>
+  <li><code>regional</code>: ve los KPIs de varias tiendas asignadas en <code>user_stores</code>.</li>
+  <li><code>manager</code>: ve los KPIs de una sola tienda (su tienda).</li>
+  <li><code>staff</code>: ve solo su rendimiento individual dentro de su tienda.</li>
+  <li><code>viewer</code>: solo lectura, sin acceso a configuración ni a importaciones.</li>
+</ul>
+
+<h3>3.3. <code>user_stores</code> — Asignación usuario–tienda</h3>
+<p>Tabla intermedia (N:M) que define a qué tiendas tiene acceso cada usuario y con qué rol específico. Permite que un mismo usuario sea, por ejemplo, <code>manager</code> en una tienda y <code>staff</code> en otra.</p>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>user_id</code></td><td>INT UNSIGNED FK → <code>users.id</code></td><td>NO</td><td>—</td><td></td></tr>
+    <tr><td><code>store_id</code></td><td>INT UNSIGNED FK → <code>stores.id</code></td><td>NO</td><td>—</td><td></td></tr>
+    <tr><td><code>role</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Mismo dominio que <code>users.role</code></td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Auditoría</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Restricciones:</strong></p>
+<ul>
+  <li>PK compuesta <code>(user_id, store_id)</code>.</li>
+  <li>ON DELETE CASCADE en ambas FKs.</li>
+</ul>
+
+<h3>3.4. <code>operations</code> — Tabla principal</h3>
+<p>Cada fila representa <strong>una línea de operación</strong> (venta, compra a cliente, refund, captación de socio, etc.) ya normalizada y lista para alimentar los KPIs. Es la tabla con mayor volumen de filas.</p>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción / Dominio</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED PK auto-inc</td><td>NO</td><td>—</td><td>Identificador interno</td></tr>
+    <tr><td><code>store_id</code></td><td>INT UNSIGNED FK → <code>stores.id</code></td><td>NO</td><td>—</td><td>Tienda a la que pertenece la operación</td></tr>
+    <tr><td><code>reference</code></td><td>VARCHAR</td><td>SÍ</td><td>32</td><td>Order Number (Looker). NULL en <code>captacion</code></td></tr>
+    <tr><td><code>type</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Dominio cerrado: <code>Sale</code>, <code>Cash Buy</code>, <code>Transfer</code>, <code>Exchange</code>, <code>Refund</code>, <code>RMA</code>, <code>test-admission</code>, <code>membership</code></td></tr>
+    <tr><td><code>category</code></td><td>VARCHAR</td><td>SÍ</td><td>80</td><td>Categoría del producto (ej. <code>PlayStation 5</code>)</td></tr>
+    <tr><td><code>date</code></td><td>DATE</td><td>NO</td><td>—</td><td>Fecha de la operación (sin hora)</td></tr>
+    <tr><td><code>staff</code></td><td>VARCHAR</td><td>SÍ</td><td>80</td><td>Nombre del empleado que realizó la operación</td></tr>
+    <tr><td><code>quantity</code></td><td>INT</td><td>SÍ</td><td>—</td><td>Puede ser negativa (refunds, cash buys)</td></tr>
+    <tr><td><code>price</code></td><td>DECIMAL(10,2)</td><td>SÍ</td><td>—</td><td>Precio unitario (puede ser negativo)</td></tr>
+    <tr><td><code>total</code></td><td>DECIMAL(12,2)</td><td>SÍ</td><td>—</td><td><code>quantity × price</code>, calculado al importar</td></tr>
+    <tr><td><code>week</code></td><td>SMALLINT UNSIGNED</td><td>SÍ</td><td>—</td><td>Nº de semana del curso (sáb–vie, semana 1 = 27/12/2025)</td></tr>
+    <tr><td><code>source</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Dominio cerrado: <code>baby-banking</code>, <code>baby-banking-ic</code>, <code>ecom</code>, <code>captacion</code>, <code>attachment</code></td></tr>
+    <tr><td><code>channel</code></td><td>VARCHAR</td><td>NO</td><td>10</td><td>Dominio cerrado: <code>tienda</code>, <code>ecom</code>. Default <code>tienda</code></td></tr>
+    <tr><td><code>import_id</code></td><td>BIGINT UNSIGNED FK → <code>imports.id</code></td><td>SÍ</td><td>—</td><td>Trazabilidad: importación que trajo esta fila</td></tr>
+    <tr><td><code>created_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Auditoría — fecha de inserción</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Notas sobre tipos:</strong></p>
+<ul>
+  <li><code>DECIMAL</code> (no <code>FLOAT</code> / <code>DOUBLE</code>): trabajamos con dinero. Hay que evitar errores de coma flotante.</li>
+  <li><code>DATE</code> (no <code>DATETIME</code>): la hora del CSV se descarta al normalizar.</li>
+  <li>Para <code>type</code>, <code>source</code>, <code>channel</code>: se puede usar <code>ENUM</code> si el SGBD lo soporta y se prefiere validar en BBDD; alternativa portable es <code>VARCHAR</code> + <code>CHECK constraint</code>.</li>
+</ul>
+
+<h3>3.5. <code>imports</code> — Log de importaciones</h3>
+<p>Una fila por cada CSV cargado. Sirve para auditoría, para el panel de "limpieza por fuente" y para calcular cobertura de cruces (ecom × baby-banking).</p>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>id</code></td><td>BIGINT UNSIGNED PK auto-inc</td><td>NO</td><td>—</td><td>Identificador</td></tr>
+    <tr><td><code>source</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Mismo dominio que <code>operations.source</code></td></tr>
+    <tr><td><code>filename</code></td><td>VARCHAR</td><td>SÍ</td><td>255</td><td>Nombre del CSV original</td></tr>
+    <tr><td><code>imported_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Cuándo se importó</td></tr>
+    <tr><td><code>imported_by</code></td><td>INT UNSIGNED FK → <code>users.id</code></td><td>SÍ</td><td>—</td><td>Quién la ejecutó</td></tr>
+    <tr><td><code>row_count</code></td><td>INT UNSIGNED</td><td>NO</td><td>—</td><td>Filas válidas insertadas (tras filtros)</td></tr>
+    <tr><td><code>date_from</code></td><td>DATE</td><td>SÍ</td><td>—</td><td>Primera fecha cubierta por el CSV</td></tr>
+    <tr><td><code>date_to</code></td><td>DATE</td><td>SÍ</td><td>—</td><td>Última fecha cubierta</td></tr>
+    <tr><td><code>store_count</code></td><td>SMALLINT UNSIGNED</td><td>SÍ</td><td>—</td><td>Nº de tiendas distintas en el CSV</td></tr>
+    <tr><td><code>stores</code></td><td>JSON / TEXT</td><td>SÍ</td><td>—</td><td>Lista de IDs de tienda (JSON array) afectadas</td></tr>
+  </tbody>
+</table>
+
+<h3>3.6. <code>settings</code> — Configuración clave-valor</h3>
+<p>Equivalente al store <code>settings</code> de Dexie. Guarda fecha de inicio del curso, configuración de KPIs (qué KPIs cuentan ecom), alias de tiendas para captación, etc.</p>
+
+<table>
+  <thead>
+    <tr><th>Campo</th><th>Tipo</th><th>Nulable</th><th>Long.</th><th>Descripción</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>key</code></td><td>VARCHAR PK</td><td>NO</td><td>64</td><td>Clave única</td></tr>
+    <tr><td><code>value</code></td><td>JSON / TEXT</td><td>NO</td><td>—</td><td>Valor serializado (JSON preferido)</td></tr>
+    <tr><td><code>scope</code></td><td>VARCHAR</td><td>NO</td><td>20</td><td>Dominio cerrado: <code>global</code>, <code>store</code>, <code>user</code></td></tr>
+    <tr><td><code>store_id</code></td><td>INT UNSIGNED FK → <code>stores.id</code></td><td>SÍ</td><td>—</td><td>NULL si scope = global o user</td></tr>
+    <tr><td><code>user_id</code></td><td>INT UNSIGNED FK → <code>users.id</code></td><td>SÍ</td><td>—</td><td>NULL si scope = global o store</td></tr>
+    <tr><td><code>updated_at</code></td><td>TIMESTAMP</td><td>NO</td><td>—</td><td>Última modificación</td></tr>
+  </tbody>
+</table>
+
+<p><strong>Restricciones:</strong> Unicidad lógica: <code>(key, scope, store_id, user_id)</code> debe ser único.</p>
+
+<h2 class="break">4. Restricciones de unicidad y deduplicación</h2>
+
+<p>La regla de deduplicación que ya valida el cliente al importar CSVs debe replicarse en BBDD:</p>
+
+<blockquote>
+  <p>Una operación es duplicada si comparte <strong>(reference, source, price, category)</strong> con otra ya almacenada. La dedup es <strong>por fuente</strong>: un mismo Order Number puede aparecer en <code>baby-banking</code> y en <code>ecom</code> y NO es duplicado (de hecho, el cruce entre fuentes es lo que permite identificar pedidos online dentro del baby banking).</p>
+</blockquote>
+
+<pre><code>CREATE UNIQUE INDEX uq_ops_dedup
+  ON operations (reference, source, price, category)
+  WHERE reference IS NOT NULL;</code></pre>
+
+<p class="small">Nota: el <code>WHERE reference IS NOT NULL</code> evita colisión en filas de <code>captacion</code> (que no tienen Order Number). Si el SGBD no soporta índices parciales (MySQL antes de 8.0.13), se puede sustituir por una columna calculada que use un valor centinela.</p>
+
+<h2>5. Índices recomendados</h2>
+<p>Replican los índices compuestos que ya usa la versión Dexie (probados en producción local):</p>
+
+<pre><code>-- Índices simples
+CREATE INDEX idx_ops_store      ON operations (store_id);
+CREATE INDEX idx_ops_date       ON operations (date);
+CREATE INDEX idx_ops_reference  ON operations (reference);
+CREATE INDEX idx_ops_source     ON operations (source);
+CREATE INDEX idx_ops_channel    ON operations (channel);
+
+-- Índices compuestos (los que más usa el motor de KPIs)
+CREATE INDEX idx_ops_store_date     ON operations (store_id, date);
+CREATE INDEX idx_ops_category_date  ON operations (category, date);
+CREATE INDEX idx_ops_type_date      ON operations (type, date);
+CREATE INDEX idx_ops_staff_date     ON operations (staff, date);
+CREATE INDEX idx_ops_staff_week     ON operations (staff, week);
+CREATE INDEX idx_ops_type_week      ON operations (type, week);
+
+-- Imports
+CREATE INDEX idx_imports_source_date ON imports (source, imported_at);</code></pre>
+
+<h2>6. Equivalencias de tipos por SGBD</h2>
+
+<table>
+  <thead>
+    <tr><th>Concepto</th><th>MySQL / MariaDB</th><th>SQL Server</th><th>PostgreSQL</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>PK auto-incremental</td><td><code>BIGINT UNSIGNED AUTO_INCREMENT</code></td><td><code>BIGINT IDENTITY(1,1)</code></td><td><code>BIGSERIAL</code></td></tr>
+    <tr><td>Texto corto</td><td><code>VARCHAR(n)</code></td><td><code>NVARCHAR(n)</code></td><td><code>VARCHAR(n)</code></td></tr>
+    <tr><td>Decimal monetario</td><td><code>DECIMAL(12,2)</code></td><td><code>DECIMAL(12,2)</code></td><td><code>NUMERIC(12,2)</code></td></tr>
+    <tr><td>Fecha sin hora</td><td><code>DATE</code></td><td><code>DATE</code></td><td><code>DATE</code></td></tr>
+    <tr><td>Marca temporal</td><td><code>TIMESTAMP</code> / <code>DATETIME</code></td><td><code>DATETIME2</code></td><td><code>TIMESTAMPTZ</code></td></tr>
+    <tr><td>JSON</td><td><code>JSON</code></td><td><code>NVARCHAR(MAX)</code> (con <code>ISJSON</code>)</td><td><code>JSONB</code></td></tr>
+    <tr><td>Booleano</td><td><code>TINYINT(1)</code> / <code>BOOLEAN</code></td><td><code>BIT</code></td><td><code>BOOLEAN</code></td></tr>
+    <tr><td>Enum portable</td><td><code>ENUM(...)</code> o <code>VARCHAR + CHECK</code></td><td><code>VARCHAR + CHECK</code></td><td><code>VARCHAR + CHECK</code></td></tr>
+  </tbody>
+</table>
+
+<h2>7. Estimaciones de tamaño</h2>
+<ul>
+  <li>Una fila de <code>operations</code> ≈ <strong>130–180 bytes</strong> sin índices; con índices, ~250–300 B/fila.</li>
+  <li>Una tienda CeX típica (estilo Islazul) genera del orden de <strong>30–60 k operaciones/año</strong> → ~10–20 MB/año/tienda.</li>
+  <li>Si se centralizan <strong>10 tiendas</strong>: ~100–200 MB/año + índices. Volumen muy holgado para cualquier servidor SQL moderno.</li>
+  <li>Las tablas <code>stores</code>, <code>users</code>, <code>user_stores</code>, <code>imports</code> y <code>settings</code> son despreciables en tamaño.</li>
+</ul>
+
+<h2>8. Migración desde la base de datos local</h2>
+<p>La aplicación actual exporta backups en formato <code>.json.gz</code> (gzip + JSON). El procedimiento de migración inicial sería:</p>
+
+<ol>
+  <li><strong>Generar backup</strong> desde KPI Metrics local (botón "Exportar todo").</li>
+  <li><strong>Pre-poblar</strong> <code>stores</code> con el catálogo de tiendas a centralizar y obtener su <code>id</code>.</li>
+  <li><strong>Mapear</strong> las cadenas <code>store</code> del backup a <code>store_id</code> durante la carga.</li>
+  <li><strong>Bulk-insert</strong> de <code>operations</code> e <code>imports</code> en lotes de 5.000 filas.</li>
+  <li><strong>Recalcular</strong> la columna <code>week</code> con la fecha de inicio del curso configurada (<code>2025-12-27</code>).</li>
+</ol>
+
+<h2 class="break">9. Anexo — DDL ejemplo (PostgreSQL)</h2>
+
+<pre><code>CREATE TABLE stores (
+    id          SERIAL PRIMARY KEY,
+    code        VARCHAR(10)  NOT NULL UNIQUE,
+    name        VARCHAR(60)  NOT NULL UNIQUE,
+    region      VARCHAR(2)   NOT NULL CHECK (region IN ('ES', 'IC')),
+    manager     VARCHAR(80),
+    active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE users (
+    id          SERIAL PRIMARY KEY,
+    email       VARCHAR(120) NOT NULL UNIQUE,
+    name        VARCHAR(80)  NOT NULL,
+    role        VARCHAR(20)  NOT NULL
+                CHECK (role IN ('admin','regional','manager','staff','viewer')),
+    active      BOOLEAN      NOT NULL DEFAULT TRUE,
+    last_login  TIMESTAMPTZ,
+    created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_stores (
+    user_id     INT NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+    store_id    INT NOT NULL REFERENCES stores(id) ON DELETE CASCADE,
+    role        VARCHAR(20) NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (user_id, store_id)
+);
+
+CREATE TABLE imports (
+    id           BIGSERIAL PRIMARY KEY,
+    source       VARCHAR(20) NOT NULL,
+    filename     VARCHAR(255),
+    imported_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    imported_by  INT REFERENCES users(id),
+    row_count    INT NOT NULL DEFAULT 0,
+    date_from    DATE,
+    date_to      DATE,
+    store_count  SMALLINT,
+    stores       JSONB
+);
+
+CREATE TABLE operations (
+    id          BIGSERIAL PRIMARY KEY,
+    store_id    INT NOT NULL REFERENCES stores(id),
+    reference   VARCHAR(32),
+    type        VARCHAR(20) NOT NULL,
+    category    VARCHAR(80),
+    date        DATE NOT NULL,
+    staff       VARCHAR(80),
+    quantity    INT,
+    price       NUMERIC(10,2),
+    total       NUMERIC(12,2),
+    week        SMALLINT,
+    source      VARCHAR(20) NOT NULL,
+    channel     VARCHAR(10) NOT NULL DEFAULT 'tienda',
+    import_id   BIGINT REFERENCES imports(id),
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE settings (
+    key         VARCHAR(64) NOT NULL,
+    value       JSONB       NOT NULL,
+    scope       VARCHAR(20) NOT NULL CHECK (scope IN ('global','store','user')),
+    store_id    INT REFERENCES stores(id),
+    user_id     INT REFERENCES users(id),
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (key, scope, COALESCE(store_id, 0), COALESCE(user_id, 0))
+);
+
+-- Índices: ver sección 5</code></pre>
+
+<h2>10. Preguntas abiertas para concretar con IT</h2>
+
+<ol>
+  <li><strong>SGBD corporativo</strong>: ¿SQL Server, MySQL/MariaDB, PostgreSQL u Oracle? Algunos detalles (JSON, índices parciales, tipos de auto-inc) cambian.</li>
+  <li><strong>Autenticación</strong>: ¿Active Directory / SSO corporativo, o gestión de cuentas propia con email + contraseña hasheada (bcrypt)?</li>
+  <li><strong>Vía de carga de datos</strong>: ¿La aplicación KPI Metrics empuja vía API (frontend → backend), o un proceso programado lee los CSVs de Looker directamente desde un share corporativo?</li>
+  <li><strong>Retención</strong>: ¿Mantener todo el histórico, o archivar tras X años?</li>
+  <li><strong>Backups</strong>: ¿Política de la empresa, o conservamos también el export <code>.json.gz</code> como respaldo paralelo?</li>
+  <li><strong>Entorno</strong>: ¿Hace falta un entorno de pre-producción para validar cargas antes del entorno productivo?</li>
+</ol>
+
+</body>
+</html>
