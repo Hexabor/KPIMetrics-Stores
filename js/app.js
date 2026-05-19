@@ -123,11 +123,10 @@ const App = (() => {
             if (e.target.dataset.page) loadDataExplorer(parseInt(e.target.dataset.page));
         });
 
-        // Store selects (searchable)
+        // Store select (searchable)
         initStoreSelect('kpi-panel-store', 'kpi-panel-store-list', refreshEvolution);
-        initStoreSelect('kpi-panel-staff', 'kpi-panel-staff-list', refreshEvolution, { allLabel: 'Todos los empleados' });
 
-        // Vista tienda/empleado filters (evolucion semanal unificada)
+        // Vista por tienda filters (evolucion semanal unificada)
         document.getElementById('evo-week-from').addEventListener('change', refreshEvolution);
         document.getElementById('evo-week-to').addEventListener('change', refreshEvolution);
         document.getElementById('evo-metric').addEventListener('change', () => {
@@ -138,18 +137,11 @@ const App = (() => {
         });
         // Info popover next to the KPI dropdown: rebuilt each time the
         // selection changes so the description matches the active metric.
-        // bindInfoPopoverFlip() at init covers the trigger; updateEvoMetricInfo
-        // populates the popover content from DG_COLUMN_LABELS on first paint.
         updateEvoMetricInfo();
         document.getElementById('evo-min-ops').addEventListener('change', refreshEvolution);
-        document.getElementById('evo-scope').addEventListener('change', () => {
-            updateEvoScopeVisibility();
-            refreshEvolution();
-        });
 
-        // Top N + merge-stores + chart toggle
+        // Top N + chart toggle
         document.getElementById('evo-top-n').addEventListener('change', refreshEvolution);
-        document.getElementById('evo-merge-stores')?.addEventListener('change', refreshEvolution);
         document.getElementById('btn-toggle-chart').addEventListener('click', toggleEvoChart);
 
         // KPI multi-select (compare mode)
@@ -436,14 +428,11 @@ const App = (() => {
      */
 
     // ============================
-    // DASHBOARD: STORE/STAFF (evolucion por KPI - unifica Ventas + Moviles + futuros)
+    // DASHBOARD: STORE (evolucion por KPI)
     // ============================
     async function refreshDashStore() {
         const stores = await Database.getDistinctValues('store');
         populateStoreSelect('kpi-panel-store', stores);
-        const staff = (await Database.getDistinctValues('staff')).filter(s => s && s !== 'N/A');
-        populateStoreSelect('kpi-panel-staff', staff);
-        updateEvoScopeVisibility();
 
         const fromEl = document.getElementById('evo-week-from');
         const toEl = document.getElementById('evo-week-to');
@@ -493,49 +482,25 @@ const App = (() => {
             // Admision a test: testOrderRefs counts distinct Order Numbers
             // with type='test-admission'; testItems sums quantity.
             testOrderRefs: {}, testItems: 0,
-            // Operation refs: distinct Order Numbers per non-sale counter type.
-            // counterRefs = union of all five counter types (sale + cash buy +
-            // exchange + refund + test-admission). Sale operations are already
-            // tracked via ticketRefs; we don't duplicate them here.
-            // These sets are populated regardless of attribution mode — what
-            // changes between staff and store is the monetary accumulation
-            // (cashBuyAmount / exchangeAmount / refundAmount), not the ref sets.
+            // Operation refs: distinct Order Numbers per counter type.
+            // counterRefs = union of sale + cash buy + exchange + refund + test-admission.
             refundOrderRefs: {}, cashBuyOrderRefs: {}, exchangeOrderRefs: {},
             counterRefs: {}
         };
     }
 
-    /**
-     * Add a record to a bucket.
-     *
-     * `attribution` controls the historical convention that cash buy / exchange
-     * / refund EUR amounts are NOT charged to the staff that registered them
-     * (only sales and test admissions are staff-attributable in this project).
-     *   - 'store' (default): every type accumulates everything
-     *   - 'staff':           cash buy / exchange / refund suppress monetary
-     *                        accumulation, but still contribute their Order
-     *                        Number to the operation ref sets so we can count
-     *                        operations per type at the staff level.
-     *
-     * Net effect on existing staff metrics: zero. tickets/saleRevenue/refundAmount/
-     * cashBuyAmount/exchangeAmount at staff level keep behaving as before.
-     */
-    function addToBucket(b, r, attribution) {
-        const isStaff = attribution === 'staff';
+    function addToBucket(b, r) {
         const total = r.total || 0;
         const qty = r.quantity || 0;
         const catLower = (r.category || '').toLowerCase();
         const isEcom = r.channel === 'ecom';
         const ref = r.reference || `_noref_${r.id || Math.random()}`;
-        // Counter operations (sale | cash buy | exchange | refund | test-admission)
-        // all contribute their Order Number to counterRefs (denominator of the
-        // test ratio). Memberships are excluded.
+        // counterRefs = denominator del testRatio. Memberships fuera.
         const isCounter = r.type === 'sale' || r.type === 'refund' ||
                           r.type === 'cash buy' || r.type === 'exchange' ||
                           r.type === 'test-admission';
-        if (isCounter) {
-            b.counterRefs[ref] = true;
-        }
+        if (isCounter) b.counterRefs[ref] = true;
+
         if (r.type === 'sale') {
             if ((r.price || 0) > 0) {
                 b.saleRevenue += total;
@@ -561,19 +526,20 @@ const App = (() => {
             }
         } else if (r.type === 'refund') {
             b.refundOrderRefs[ref] = true;
-            if (!isStaff) {
-                b.refundAmount += Math.abs(total);
-                if (!isEcom) b.refundAmountNoEcom += Math.abs(total);
-            }
+            b.refundAmount += Math.abs(total);
+            if (!isEcom) b.refundAmountNoEcom += Math.abs(total);
         } else if (r.type === 'cash buy') {
             b.cashBuyOrderRefs[ref] = true;
-            if (!isStaff) b.cashBuyAmount += Math.abs(total);
+            b.cashBuyAmount += Math.abs(total);
         } else if (r.type === 'exchange') {
             b.exchangeOrderRefs[ref] = true;
-            if (!isStaff) b.exchangeAmount += Math.abs(total);
+            b.exchangeAmount += Math.abs(total);
         } else if (r.type === 'membership') {
-            // Each row is one captured member; ecom flag is irrelevant here
-            b.memberships += 1;
+            // Captacion se guarda agregada por (store, date) en confirmCaptacionImport:
+            // quantity = socios captados ese dia en esa tienda. El "|| 1" mantiene
+            // compatibilidad con filas previas que vinieran 1-por-socio si hubiera
+            // datos legacy en la DB.
+            b.memberships += (r.quantity || 1);
         } else if (r.type === 'test-admission') {
             b.testOrderRefs[ref] = true;
             b.testItems += qty;
@@ -696,13 +662,14 @@ const App = (() => {
     // ============================
     // CAPTACION STORE NAME RECONCILIATION
     // ============================
-    // Captacion CSV ships store names that don't always match Baby Banking:
-    //   - Some are UPPERCASE ("MADRID ISLAZUL")
-    //   - Some lack tildes ("Alcala Magna" vs "Alcalá Magna")
-    //   - Some have different spacing ("ALCORCON TRES AGUAS" vs "Alcorcón TresAguas")
-    //   - A few have outright different words ("Getafe" vs "Getafe Madrid")
-    // The first three cases are resolved automatically; the fourth needs a
-    // manual alias in data/captacion-store-aliases.json.
+    // El CSV de captacion trae nombres de tienda que no siempre coinciden con
+    // Baby Banking:
+    //   - Algunos van en MAYUSCULAS ("MADRID ISLAZUL")
+    //   - Algunos sin tildes ("Alcala Magna" vs "Alcalá Magna")
+    //   - Algunos con espaciado distinto ("ALCORCON TRES AGUAS" vs "Alcorcón TresAguas")
+    //   - Unos pocos con palabras distintas ("Getafe" vs "Getafe Madrid")
+    // Los tres primeros se resuelven automaticamente; el cuarto necesita un
+    // alias manual en data/captacion-store-aliases.json.
     function normalizeStoreName(s) {
         if (!s || typeof s !== 'string') return '';
         // NFD splits accented chars; the regex strips combining marks (tildes, dieresis, etc.)
@@ -881,11 +848,11 @@ const App = (() => {
                 const t = b.cashBuyAmount + b.exchangeAmount;
                 return t > 0 ? formatPctDetail(Math.round(b.exchangeAmount), Math.round(t)) : '--';
             } },
-        // Captacion
+        // Captacion (a nivel tienda)
         memberships:   { label: 'Socios',
             value: b => b.memberships || 0,
             format: v => (v || 0).toLocaleString('es-ES') },
-        // Admision a test
+        // Admision a test (a nivel tienda)
         testOrders:    { label: 'Ordenes de test',
             value: b => Object.keys(b.testOrderRefs || {}).length,
             format: v => (v || 0).toLocaleString('es-ES') },
@@ -906,7 +873,6 @@ const App = (() => {
             } },
         // Operaciones (Order Numbers unicos por tipo). Una misma orden puede
         // contener compras y ventas a la vez; cada movimiento suma en su tipo.
-        // Test y refund nunca comparten Order Number con sale, por contrato CeX.
         operTotal:     { label: 'Operaciones',
             value: b => Object.keys(b.counterRefs || {}).length,
             format: v => (v || 0).toLocaleString('es-ES') },
@@ -940,16 +906,15 @@ const App = (() => {
     // EVOLUTION TABLE
     // ============================
     let evoState = {
-        staffWeekData: {},
+        rowWeekData: {},
         weeks: [],
-        scope: 'staff',
         metric: 'netSales',
         sortCol: null,
         sortDir: 'desc',
-        selectedStaff: null,  // clicked row for chart highlight
+        selectedRow: null,  // clicked row for chart highlight
         // Compare-KPIs mode
         compareMode: false,
-        compareSubject: null,     // name of the fixed subject (staff or store)
+        compareSubject: null,     // store name when a single store is fixed
         compareWeekData: null,    // {weekN: bucket} for that subject
         selectedKpis: null        // Set<metricKey>, null until initialized
     };
@@ -1051,12 +1016,6 @@ const App = (() => {
         if (countEl) countEl.textContent = `${n}/${total}`;
         if (allCb) allCb.checked = n === total && total > 0;
         renderEvoKpiList();
-    }
-
-    function updateEvoScopeVisibility() {
-        const scope = document.getElementById('evo-scope').value;
-        const staffWrap = document.getElementById('kpi-panel-staff-wrap');
-        if (staffWrap) staffWrap.classList.toggle('hidden', scope !== 'staff');
     }
 
     function updateEvoModeVisibility() {
@@ -1198,14 +1157,10 @@ const App = (() => {
         const weekFrom = parseInt(fromEl.value) || 1;
         const weekTo = parseInt(toEl.value) || weekFrom;
         evoState.metric = document.getElementById('evo-metric').value;
-        evoState.scope = document.getElementById('evo-scope').value;
         const store = getStoreValue('kpi-panel-store');
-        const staffPick = evoState.scope === 'staff' ? getStoreValue('kpi-panel-staff') : 'all';
 
-        // Compare-KPIs mode: active when a single subject is fixed
-        let compareSubject = null;
-        if (evoState.scope === 'store' && store && store !== 'all') compareSubject = store;
-        else if (evoState.scope === 'staff' && staffPick && staffPick !== 'all') compareSubject = staffPick;
+        // Compare-KPIs mode: active when a single store is fixed
+        const compareSubject = store && store !== 'all' ? store : null;
         evoState.compareMode = !!compareSubject;
         evoState.compareSubject = compareSubject;
         if (!evoState.selectedKpis) {
@@ -1250,86 +1205,27 @@ const App = (() => {
         // Ecom filtering is per-KPI (see Configuracion): buckets store both
         // variants, metrics pick the right one. No record-level filter here.
 
-        // Compare-KPIs branch: aggregate one bucket per week for the fixed subject
+        // Compare-KPIs branch: aggregate one bucket per week for the fixed store
         if (evoState.compareMode) {
             evoState.compareWeekData = {};
-            const attribution = evoState.scope === 'staff' ? 'staff' : 'store';
             for (const r of records) {
                 const wk = r.week;
                 if (wk < weekFrom || wk > weekTo) continue;
-                if (evoState.scope === 'staff') {
-                    if ((r.staff || 'N/A') !== compareSubject) continue;
-                }
-                // scope=store: records already filtered by store above.
-                // Cash buy / exchange / refund EUR amounts are suppressed at
-                // staff level by addToBucket(attribution='staff'); their Order
-                // Numbers still feed counterRefs / per-type ref sets so we can
-                // count operations.
                 if (!evoState.compareWeekData[wk]) evoState.compareWeekData[wk] = emptyBucket();
-                addToBucket(evoState.compareWeekData[wk], r, attribution);
+                addToBucket(evoState.compareWeekData[wk], r);
             }
             renderCompareKPIs();
             return;
         }
 
-        evoState.staffWeekData = {};
-        evoState.staffStore = {};
-        const nameStores = {};
-        const attribution = evoState.scope === 'staff' ? 'staff' : 'store';
+        evoState.rowWeekData = {};
         for (const r of records) {
             const wk = r.week;
             if (wk < weekFrom || wk > weekTo) continue;
-            // No record-level filter by type: addToBucket(..., 'staff') suppresses
-            // cash buy / exchange / refund EUR at staff level while still feeding
-            // their refs to counterRefs and per-type ref sets (so the operation-
-            // count metrics work). All staff-attributable monetary fields keep
-            // matching the previous behavior.
-
-            const staffName = r.staff || 'N/A';
-            const storeName = r.store || '?';
-            let key;
-            if (evoState.scope === 'store') {
-                key = storeName;
-            } else {
-                key = `${staffName}\t${storeName}`;
-                evoState.staffStore[key] = storeName;
-                if (!nameStores[staffName]) nameStores[staffName] = new Set();
-                nameStores[staffName].add(storeName);
-            }
-
-            if (!evoState.staffWeekData[key]) evoState.staffWeekData[key] = {};
-            if (!evoState.staffWeekData[key][wk]) evoState.staffWeekData[key][wk] = emptyBucket();
-            addToBucket(evoState.staffWeekData[key][wk], r, attribution);
-        }
-
-        // Track names that appear in multiple stores
-        evoState.nameStoresMap = {};
-        for (const [name, stores] of Object.entries(nameStores)) {
-            if (stores.size > 1) evoState.nameStoresMap[name] = [...stores];
-        }
-
-        // Merge stores if toggle is on
-        const mergeStores = document.getElementById('evo-merge-stores')?.checked;
-        if (mergeStores && evoState.scope === 'staff') {
-            const merged = {};
-            const mergedStores = {};
-            for (const [key, weekData] of Object.entries(evoState.staffWeekData)) {
-                const name = key.includes('\t') ? key.split('\t')[0] : key;
-                if (!merged[name]) { merged[name] = {}; mergedStores[name] = new Set(); }
-                const store = evoState.staffStore[key];
-                if (store) mergedStores[name].add(store);
-                for (const [wk, cell] of Object.entries(weekData)) {
-                    if (!merged[name][wk]) merged[name][wk] = emptyBucket();
-                    mergeBuckets(merged[name][wk], cell);
-                }
-            }
-            evoState.staffWeekData = merged;
-            evoState.mergedStoresMap = {};
-            for (const [name, stores] of Object.entries(mergedStores)) {
-                evoState.mergedStoresMap[name] = [...stores];
-            }
-        } else {
-            evoState.mergedStoresMap = null;
+            const key = r.store || '?';
+            if (!evoState.rowWeekData[key]) evoState.rowWeekData[key] = {};
+            if (!evoState.rowWeekData[key][wk]) evoState.rowWeekData[key][wk] = emptyBucket();
+            addToBucket(evoState.rowWeekData[key][wk], r);
         }
 
         renderEvolution();
@@ -1350,9 +1246,8 @@ const App = (() => {
     }
 
     function evoSortValue(name, col, metric, weeks) {
-        const wd = evoState.staffWeekData[name];
-        if (col === 'name') return (name.includes('\t') ? name.split('\t')[0] : name).toLowerCase();
-        if (col === 'store') return (evoState.staffStore?.[name] || '').toLowerCase();
+        const wd = evoState.rowWeekData[name];
+        if (col === 'name') return name.toLowerCase();
         const def = METRICS[metric];
         if (!def) return 0;
         let bucket;
@@ -1389,17 +1284,16 @@ const App = (() => {
     }
 
     function renderCompareKPIs() {
-        const { compareSubject, compareWeekData, weeks, scope } = evoState;
+        const { compareSubject, compareWeekData, weeks } = evoState;
         const thead = document.getElementById('evo-thead');
         const tbody = document.getElementById('evo-tbody');
         const tfoot = document.getElementById('evo-tfoot');
 
         const selectedKeys = Object.keys(METRICS).filter(k => evoState.selectedKpis.has(k));
         const colCount = weeks.length + 3;
-        const subjectLabel = scope === 'store' ? 'Tienda' : 'Empleado';
 
         thead.innerHTML = `<tr>
-            <th>KPI <span class="col-subject-hint">(${escapeHtml(subjectLabel)}: ${escapeHtml(compareSubject)})</span></th>
+            <th>KPI <span class="col-subject-hint">(Tienda: ${escapeHtml(compareSubject)})</span></th>
             <th class="col-spark">Evolucion</th>
             ${weeks.map(w => `<th>W${w}</th>`).join('')}
             <th class="col-total"><strong>Total</strong></th>
@@ -1454,7 +1348,7 @@ const App = (() => {
     }
 
     function renderEvolution() {
-        const { staffWeekData, weeks, scope, metric, sortCol, sortDir } = evoState;
+        const { rowWeekData, weeks, metric, sortCol, sortDir } = evoState;
         const thead = document.getElementById('evo-thead');
         const tbody = document.getElementById('evo-tbody');
         const tfoot = document.getElementById('evo-tfoot');
@@ -1464,12 +1358,9 @@ const App = (() => {
             return sortDir === 'desc' ? ' sort-desc' : ' sort-asc';
         };
 
-        const showStore = scope === 'staff';
-        const nameHeader = scope === 'store' ? 'Tienda' : 'Empleado';
         thead.innerHTML = `<tr>
             <th class="col-rank">#</th>
-            <th class="sortable${sortCls('name')}" data-evo-sort="name">${nameHeader}</th>
-            ${showStore ? `<th class="sortable${sortCls('store')}" data-evo-sort="store">Tienda</th>` : ''}
+            <th class="sortable${sortCls('name')}" data-evo-sort="name">Tienda</th>
             ${weeks.map(w => `<th class="sortable${sortCls(w)}" data-evo-sort="${w}">W${w}</th>`).join('')}
             <th class="sortable col-total${sortCls('total')}" data-evo-sort="total"><strong>Total</strong></th>
         </tr>`;
@@ -1478,14 +1369,14 @@ const App = (() => {
         thead.querySelectorAll('th.sortable').forEach(th => {
             th.addEventListener('click', () => {
                 const col = th.dataset.evoSort;
-                sortEvolution(col === 'name' || col === 'total' || col === 'store' ? col : parseInt(col));
+                sortEvolution(col === 'name' || col === 'total' ? col : parseInt(col));
             });
         });
 
-        let staffNames = Object.keys(staffWeekData);
+        let rowNames = Object.keys(rowWeekData);
 
-        if (staffNames.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${weeks.length + (showStore ? 4 : 3)}" class="empty-msg">Sin datos para estas semanas.</td></tr>`;
+        if (rowNames.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${weeks.length + 3}" class="empty-msg">Sin datos para estas semanas.</td></tr>`;
             tfoot.innerHTML = '';
             return;
         }
@@ -1493,7 +1384,7 @@ const App = (() => {
         // Sort: default by total desc, or by clicked column
         const rankCol = sortCol || 'total';
         const rankDir = sortCol ? sortDir : 'desc';
-        staffNames.sort((a, b) => {
+        rowNames.sort((a, b) => {
             const va = evoSortValue(a, rankCol, metric, weeks);
             const vb = evoSortValue(b, rankCol, metric, weeks);
             if (typeof va === 'string') return rankDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
@@ -1505,10 +1396,10 @@ const App = (() => {
         if (metricDef?.isPct && metricDef.minOpsOf) {
             const minOps = parseInt(document.getElementById('evo-min-ops').value) || 0;
             if (minOps > 0) {
-                staffNames = staffNames.filter(key => {
+                rowNames = rowNames.filter(key => {
                     let total = 0;
                     for (const wk of weeks) {
-                        const c = staffWeekData[key]?.[wk];
+                        const c = rowWeekData[key]?.[wk];
                         if (c) total += metricDef.minOpsOf(c);
                     }
                     return total >= minOps;
@@ -1519,53 +1410,32 @@ const App = (() => {
         // Apply top-n filter
         const topNVal = document.getElementById('evo-top-n').value;
         if (topNVal !== 'all') {
-            staffNames = staffNames.slice(0, parseInt(topNVal));
+            rowNames = rowNames.slice(0, parseInt(topNVal));
         }
 
-        const isMerged = !!evoState.mergedStoresMap;
-        tbody.innerHTML = staffNames.map((key, idx) => {
-            const wd = staffWeekData[key];
-            const selected = evoState.selectedStaff === key ? ' class="evo-row-selected"' : '';
-            const displayName = key.includes('\t') ? key.split('\t')[0] : key;
-            let nameHtml = escapeHtml(displayName);
-            let storeCell = '';
-            if (showStore) {
-                if (isMerged) {
-                    const stores = evoState.mergedStoresMap[key] || [];
-                    storeCell = stores.length > 1
-                        ? `<td class="col-store"><span title="${stores.join(', ')}">${stores.length} tiendas</span></td>`
-                        : `<td class="col-store">${escapeHtml(stores[0] || '')}</td>`;
-                } else {
-                    const storeName = evoState.staffStore?.[key] || '';
-                    const dupStores = evoState.nameStoresMap?.[displayName];
-                    if (dupStores) {
-                        nameHtml += ` <span class="dup-mark" title="Tambien en: ${dupStores.filter(s => s !== storeName).join(', ')}">*</span>`;
-                    }
-                    storeCell = `<td class="col-store">${escapeHtml(storeName)}</td>`;
-                }
-            }
-            return `<tr${selected} data-staff="${escapeHtml(key)}">
+        tbody.innerHTML = rowNames.map((key, idx) => {
+            const wd = rowWeekData[key];
+            const selected = evoState.selectedRow === key ? ' class="evo-row-selected"' : '';
+            return `<tr${selected} data-row="${escapeHtml(key)}">
                 <td class="col-rank">${idx + 1}</td>
-                <td>${nameHtml}</td>
-                ${storeCell}
+                <td>${escapeHtml(key)}</td>
                 ${weeks.map(w => `<td>${evoCellValue(wd?.[w], metric)}</td>`).join('')}
                 <td class="col-total"><strong>${evoRowTotal(wd || {}, metric, weeks)}</strong></td>
             </tr>`;
         }).join('');
 
-        if (staffNames.length > 1) {
+        if (rowNames.length > 1) {
             const colTotals = {};
             for (const w of weeks) {
                 colTotals[w] = emptyBucket();
-                for (const name of staffNames) {
-                    const c = staffWeekData[name]?.[w];
+                for (const name of rowNames) {
+                    const c = rowWeekData[name]?.[w];
                     if (c) mergeBuckets(colTotals[w], c);
                 }
             }
-            tfoot.innerHTML = `<tr data-staff="__TOTAL__">
+            tfoot.innerHTML = `<tr data-row="__TOTAL__">
                 <td class="col-rank"></td>
                 <td>TOTAL</td>
-                ${showStore ? '<td></td>' : ''}
                 ${weeks.map(w => `<td><strong>${evoCellValue(colTotals[w], metric)}</strong></td>`).join('')}
                 <td class="col-total"><strong>${evoRowTotal(colTotals, metric, weeks)}</strong></td>
             </tr>`;
@@ -1573,14 +1443,12 @@ const App = (() => {
             tfoot.innerHTML = '';
         }
 
-        // Click any row (staff or total) to select for chart
+        // Click any row to select for chart
         function selectRow(name, tr) {
-            evoState.selectedStaff = evoState.selectedStaff === name ? null : name;
-            // Update highlight across both tbody and tfoot
+            evoState.selectedRow = evoState.selectedRow === name ? null : name;
             const table = document.getElementById('evo-table');
             table.querySelectorAll('tr').forEach(r => r.classList.remove('evo-row-selected'));
-            if (evoState.selectedStaff) tr.classList.add('evo-row-selected');
-            // Open chart if collapsed, then render
+            if (evoState.selectedRow) tr.classList.add('evo-row-selected');
             const section = document.getElementById('evo-chart-section');
             if (section.classList.contains('collapsed')) {
                 section.classList.remove('collapsed');
@@ -1592,15 +1460,15 @@ const App = (() => {
             }
         }
 
-        document.querySelectorAll('#evo-table tr[data-staff]').forEach(tr => {
+        document.querySelectorAll('#evo-table tr[data-row]').forEach(tr => {
             tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => selectRow(tr.dataset.staff, tr));
+            tr.addEventListener('click', () => selectRow(tr.dataset.row, tr));
         });
 
         // Conditional gradient for absolute metrics
         if (metricDef && !metricDef.isPct) {
             const evoExtractor = (cell) => cell ? (metricDef.value(cell) || 0) : 0;
-            applyHeatmap('evo-table', staffWeekData, weeks, evoExtractor);
+            applyHeatmap('evo-table', rowWeekData, weeks, evoExtractor);
         }
 
         // Refresh chart if visible
@@ -1660,7 +1528,7 @@ const App = (() => {
         }
 
         const chartMetric = evoState.metric;
-        const { staffWeekData, weeks, scope } = evoState;
+        const { rowWeekData, weeks } = evoState;
 
         document.getElementById('evo-chart-info').dataset.tip = CHART_METRIC_INFO[chartMetric] || '';
 
@@ -1672,8 +1540,8 @@ const App = (() => {
             evoChartInstance = null;
         }
 
-        const allStaff = Object.keys(staffWeekData);
-        if (weeks.length === 0 || allStaff.length === 0) return;
+        const allRows = Object.keys(rowWeekData);
+        if (weeks.length === 0 || allRows.length === 0) return;
 
         // Ensure canvas has dimensions
         const container = canvas.parentElement;
@@ -1687,7 +1555,7 @@ const App = (() => {
         const isPct = !!metricDef?.isPct;
         const isCurrency = !!metricDef?.isCurrency;
         const topNVal = document.getElementById('evo-top-n').value;
-        const showTotal = allStaff.length === 1;
+        const showTotal = allRows.length === 1;
         const maxLines = topNVal === 'all' ? 999 : parseInt(topNVal) || 999;
 
         const colors = [
@@ -1696,11 +1564,11 @@ const App = (() => {
             '#be123c', '#0d9488', '#c026d3', '#ca8a04', '#475569'
         ];
 
-        // Aggregate total bucket across all staff for a week
+        // Aggregate total bucket across all rows for a week
         const totalBucketAtWeek = (w) => {
             const b = emptyBucket();
-            for (const name of allStaff) {
-                const c = staffWeekData[name]?.[w];
+            for (const name of allRows) {
+                const c = rowWeekData[name]?.[w];
                 if (c) mergeBuckets(b, c);
             }
             return b;
@@ -1708,31 +1576,30 @@ const App = (() => {
 
         let datasets;
 
-        // If a row is selected, show that line (+ total as context if it's a staff)
-        const selected = evoState.selectedStaff;
+        const selected = evoState.selectedRow;
         if (selected === '__TOTAL__' || (showTotal && !selected)) {
             const data = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
             datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
-        } else if (selected && staffWeekData[selected] && !showTotal) {
-            const selData = weeks.map(w => evoChartValue(staffWeekData[selected]?.[w], chartMetric));
+        } else if (selected && rowWeekData[selected] && !showTotal) {
+            const selData = weeks.map(w => evoChartValue(rowWeekData[selected]?.[w], chartMetric));
             const totalData = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
             datasets = [
                 { label: selected.split(' ').slice(0, 2).join(' '), data: selData, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 5, borderWidth: 3 },
-                { label: 'Total tienda', data: totalData, borderColor: '#94a3b8', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 1.5, borderDash: [4, 3] }
+                { label: 'Total', data: totalData, borderColor: '#94a3b8', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 1.5, borderDash: [4, 3] }
             ];
         } else if (showTotal) {
             const data = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
             datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
         } else {
             const rankCol = evoState.sortCol || 'total';
-            const ranked = allStaff
+            const ranked = allRows
                 .map(name => ({ name, val: evoSortValue(name, rankCol, chartMetric, weeks) }))
                 .sort((a, b) => b.val - a.val)
                 .slice(0, maxLines);
 
             datasets = ranked.map(({ name }, i) => ({
-                label: (name.includes('\t') ? name.split('\t')[0] : name).split(' ').slice(0, 2).join(' '),
-                data: weeks.map(w => evoChartValue(staffWeekData[name]?.[w], chartMetric)),
+                label: name.split(' ').slice(0, 2).join(' '),
+                data: weeks.map(w => evoChartValue(rowWeekData[name]?.[w], chartMetric)),
                 borderColor: colors[i % colors.length],
                 backgroundColor: colors[i % colors.length] + '15',
                 tension: 0.3,
@@ -1740,12 +1607,11 @@ const App = (() => {
                 borderWidth: 2
             }));
 
-            // Always include an aggregate Total line for context (skip for pct metrics:
-            // summing percentages across subjects makes no sense).
+            // Aggregate Total line for context (skip for pct: averaging makes no sense).
             if (!isPct) {
                 const totalData = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
                 datasets.push({
-                    label: scope === 'store' ? 'Total' : 'Total tienda',
+                    label: 'Total',
                     data: totalData,
                     borderColor: '#64748b',
                     backgroundColor: 'transparent',
@@ -1928,7 +1794,7 @@ const App = (() => {
     // Strategy: replace-by-date-range. The CSV is treated as the source of
     // truth for the dates it covers. Existing captacion rows in that range
     // are deleted before adding the new ones. This avoids needing a
-    // per-row dedup key (Member Id is intentionally not stored).
+    // per-row dedup key (Member Id is intentionally not stored, GDPR).
     async function confirmCaptacionImport(records, filename) {
         if (!records.length) {
             UI.hideProgress();
@@ -1983,23 +1849,45 @@ const App = (() => {
         const dateFrom = dates[0];
         const dateTo = dates[dates.length - 1];
 
+        // Captacion se almacena AGREGADA por (store, date). Sin Order Number,
+        // Member Id ni Staff que distingan socios individuales (todo descartado
+        // por GDPR/anonimizacion), una fila por socio es almacenamiento puro
+        // tonto. Una fila por (tienda, dia) con quantity = socios captados ese
+        // dia ocupa ~10x menos sin perder informacion para los KPIs.
+        const totalMembers = records.length;
+        const grouped = {};
+        for (const r of records) {
+            if (!r.store || !r.date) continue;
+            const key = `${r.store}\t${r.date}`;
+            if (!grouped[key]) {
+                grouped[key] = {
+                    type: 'membership',
+                    store: r.store,
+                    date: r.date,
+                    quantity: 0
+                };
+            }
+            grouped[key].quantity += 1;
+        }
+        const aggregated = Object.values(grouped);
+
         UI.showProgress(0, 1, 'Reemplazando rango previo de captacion...');
         const deleted = await Database.replaceOperationsByDateRange('captacion', dateFrom, dateTo);
         if (deleted > 0) {
             UI.addLog(`Reemplazo: ${deleted.toLocaleString()} filas previas de captacion en ${UI.formatDate(dateFrom)} — ${UI.formatDate(dateTo)} eliminadas`, 'success');
         }
 
-        UI.showProgress(0, records.length, 'Guardando socios...');
+        UI.showProgress(0, aggregated.length, 'Guardando socios...');
         const weekFn = KPIEngine.helpers.businessWeek;
-        const added = await Database.bulkAddOperations(records, (current, total) => {
+        const added = await Database.bulkAddOperations(aggregated, (current, total) => {
             UI.showProgress(current, total);
         }, weekFn, 'captacion');
 
-        const storeSet = new Set(records.map(r => r.store).filter(Boolean));
+        const storeSet = new Set(aggregated.map(r => r.store).filter(Boolean));
         await Database.logImport({
             source: 'captacion',
             filename,
-            rowCount: added,
+            rowCount: totalMembers,  // socios captados (no filas en BD, que es menor por la agregacion)
             dateFrom,
             dateTo,
             storeCount: storeSet.size,
@@ -2007,7 +1895,7 @@ const App = (() => {
         });
 
         UI.hideProgress();
-        UI.addLog(`Captacion OK: ${added.toLocaleString()} socios importados`, 'success');
+        UI.addLog(`Captacion OK: ${totalMembers.toLocaleString()} socios captados (${added.toLocaleString()} filas (tienda, dia) en BD)`, 'success');
 
         currentPreviewData = null;
         resetDashboardFilters();
@@ -2752,7 +2640,7 @@ const App = (() => {
         for (const r of records) {
             const store = r.store || '?';
             if (!byStoreBucket[store]) byStoreBucket[store] = emptyBucket();
-            addToBucket(byStoreBucket[store], r, 'store');
+            addToBucket(byStoreBucket[store], r);
         }
         return byStoreBucket;
     }
@@ -3651,7 +3539,7 @@ const App = (() => {
 
         for (const r of weekRecords) {
             // Memberships and test admissions have no usable product category;
-            // they belong to Vista general / Vista tienda-empleado, not to the
+            // they belong to Vista general / Vista por tienda, not to the
             // category-axis Vista detalle. (Test admissions all live in a
             // single bookkeeping category "Test", which would just pollute
             // the breakdown.)
@@ -3960,7 +3848,7 @@ const App = (() => {
 
         // Apply to each row's week cells
         rows.forEach(row => {
-            const rowKey = row.dataset.staff || row.dataset.csKey;
+            const rowKey = row.dataset.row;
             if (!rowKey || rowKey === '__TOTAL__') return;
             const wd = dataMap[rowKey];
             if (!wd) return;

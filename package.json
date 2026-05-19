@@ -1,8 +1,8 @@
 {
-  "name": "kpi-metrics-2026",
+  "name": "kpi-metrics-stores",
   "version": "1.0.0",
   "private": true,
-  "description": "Tests para KPI Metrics 2026 (la app sigue siendo HTML estatico, esto es solo herramienta de dev)",
+  "description": "Tests para KPI Metrics 2026 - edicion solo tiendas (sin datos de staff, compatible GDPR). La app sigue siendo HTML estatico; esto es solo herramienta de dev.",
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest"

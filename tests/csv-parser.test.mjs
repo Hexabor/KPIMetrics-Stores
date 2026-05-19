@@ -32,10 +32,10 @@ describe('normalizeDate', () => {
 });
 
 describe('mapRecord - reglas de descarte e import', () => {
+    // Mapping sin Staff: el header Staff del CSV no se mapea a ningun campo interno.
     const mapping = {
         'Branch': 'store',
         'Order Number': 'reference',
-        'Staff': 'staff',
         'Order Dt': 'date',
         'Transaction Type': 'type',
         'Box ID': 'sku',
@@ -188,17 +188,16 @@ describe('mapRecord - reglas de descarte e import', () => {
     });
 });
 
-describe('mapRecord - source captacion', () => {
+describe('mapRecord - source captacion (sin staff por GDPR)', () => {
+    // Mapping de captacion sin Staff: solo store + date.
     const captacionMapping = {
         'Branch': 'store',
-        'Staff': 'staff',
         'subscriptiondate': 'date'
     };
 
     it('strip prefijo "CeX " del nombre de tienda', () => {
         const raw = {
             'Branch': 'CeX YORK',
-            'Staff': 'Ana',
             'subscriptiondate': '2026-04-03'
         };
         const r = mapRecord(raw, captacionMapping, 'captacion');
@@ -209,7 +208,6 @@ describe('mapRecord - source captacion', () => {
     it('"CeX Madrid Islazul" -> "Madrid Islazul"', () => {
         const raw = {
             'Branch': 'CeX Madrid Islazul',
-            'Staff': 'Arc',
             'subscriptiondate': '2026-04-03'
         };
         const r = mapRecord(raw, captacionMapping, 'captacion');
@@ -217,12 +215,79 @@ describe('mapRecord - source captacion', () => {
     });
 
     it('row sin date devuelve null', () => {
-        const raw = { 'Branch': 'CeX YORK', 'Staff': 'Ana' };
+        const raw = { 'Branch': 'CeX YORK' };
         expect(mapRecord(raw, captacionMapping, 'captacion')).toBeNull();
     });
 
     it('row sin store devuelve null', () => {
-        const raw = { 'Staff': 'Ana', 'subscriptiondate': '2026-04-03' };
+        const raw = { 'subscriptiondate': '2026-04-03' };
         expect(mapRecord(raw, captacionMapping, 'captacion')).toBeNull();
+    });
+
+    it('captacion record NO contiene staff aunque venga en el CSV', () => {
+        const captacionConStaff = {
+            'Branch': 'CeX YORK',
+            'Staff': 'Ana',
+            'subscriptiondate': '2026-04-03'
+        };
+        const r = mapRecord(captacionConStaff, captacionMapping, 'captacion');
+        expect(r).not.toBeNull();
+        expect(r.staff).toBeUndefined();
+        expect('staff' in r).toBe(false);
+    });
+});
+
+describe('mapRecord - regresion GDPR: Staff nunca entra al modelo', () => {
+    // Defensa #1: el mapping por defecto NO contiene Staff, por lo que el
+    // header "Staff" del CSV no se traduce a ningun campo interno.
+    it('mapping sin Staff: el header "Staff" del CSV se ignora silenciosamente', () => {
+        const mappingSinStaff = {
+            'Branch': 'store',
+            'Order Number': 'reference',
+            'Order Dt': 'date',
+            'Transaction Type': 'type',
+            'Category': 'category',
+            'Quantity': 'quantity',
+            'Price': 'price'
+        };
+        const raw = {
+            'Branch': 'Madrid',
+            'Staff': 'Ana',
+            'Order Number': 'X1',
+            'Transaction Type': 'sale',
+            'Order Dt': '3 Apr 2026, 12:00:00',
+            'Quantity': '1', 'Price': '100'
+        };
+        const r = mapRecord(raw, mappingSinStaff);
+        expect(r).not.toBeNull();
+        expect(r.staff).toBeUndefined();
+        expect('staff' in r).toBe(false);
+    });
+
+    // Defensa #2: aunque alguien restaure manualmente 'Staff' en el mapping
+    // (escenario malicioso o bug de UI), mapRecord debe borrarlo del record final.
+    it('mapping malicioso con Staff: el record final NO contiene staff', () => {
+        const mappingConStaff = {
+            'Branch': 'store',
+            'Staff': 'staff',
+            'Order Number': 'reference',
+            'Order Dt': 'date',
+            'Transaction Type': 'type',
+            'Category': 'category',
+            'Quantity': 'quantity',
+            'Price': 'price'
+        };
+        const raw = {
+            'Branch': 'Madrid',
+            'Staff': 'Ana',
+            'Order Number': 'X2',
+            'Transaction Type': 'sale',
+            'Order Dt': '3 Apr 2026, 12:00:00',
+            'Quantity': '1', 'Price': '100'
+        };
+        const r = mapRecord(raw, mappingConStaff);
+        expect(r).not.toBeNull();
+        expect(r.staff).toBeUndefined();
+        expect('staff' in r).toBe(false);
     });
 });

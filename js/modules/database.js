@@ -1,6 +1,10 @@
 /**
  * Database module - IndexedDB via Dexie.js
  * Handles all persistent storage for operations data.
+ *
+ * Edicion stores: DB renombrada a 'KPIMetricsStores2026' (la del padre era
+ * 'KPITool2026'). Los backups del padre NO son compatibles y no deben importarse
+ * en esta version. Schema v1 limpio, sin staff ni indices por staff.
  */
 const Database = (() => {
     let db;
@@ -21,42 +25,10 @@ const Database = (() => {
     }
 
     function init() {
-        db = new Dexie('KPITool2026');
+        db = new Dexie('KPIMetricsStores2026');
 
         db.version(1).stores({
-            operations: '++id, type, category, date, store, staff, week, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
-            imports: '++id, filename, date, rowCount',
-            settings: 'key'
-        });
-
-        // v2: richer import log
-        db.version(2).stores({
-            operations: '++id, type, category, date, store, staff, week, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
-            imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
-            settings: 'key'
-        });
-
-        // v3: add reference index for deduplication
-        db.version(3).stores({
-            operations: '++id, reference, type, category, date, store, staff, week, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
-            imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
-            settings: 'key'
-        });
-
-        // v4: add channel field (tienda/ecom) - backfill existing as 'tienda'
-        db.version(4).stores({
-            operations: '++id, reference, type, category, date, store, staff, week, channel, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
-            imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
-            settings: 'key'
-        }).upgrade(tx => {
-            return tx.table('operations').toCollection().modify(rec => {
-                if (!rec.channel) rec.channel = 'tienda';
-            });
-        });
-
-        // v5: add source index (required for ecom coverage queries)
-        db.version(5).stores({
-            operations: '++id, reference, type, category, date, store, staff, week, channel, source, [store+date], [category+date], [type+date], [staff+date], [staff+week], [type+week]',
+            operations: '++id, reference, type, category, date, store, week, channel, source, [store+date], [category+date], [type+date], [type+week]',
             imports: '++id, source, filename, date, rowCount, dateFrom, dateTo, storeCount, stores',
             settings: 'key'
         });
@@ -79,6 +51,9 @@ const Database = (() => {
                 if (weekFn) rec.week = weekFn(rec.date);
                 if (source) rec.source = source;
                 if (!rec.channel) rec.channel = 'tienda';
+                // Defensa GDPR: aunque un parser desactualizado o un backup
+                // legacy traiga staff, nunca llega a IndexedDB.
+                delete rec.staff;
             }
             await db.operations.bulkAdd(batch);
             added += batch.length;
@@ -451,7 +426,7 @@ const Database = (() => {
     async function clearAll() {
         invalidateOpsCache();
         db.close();
-        await Dexie.delete('KPITool2026');
+        await Dexie.delete('KPIMetricsStores2026');
         init();
         await db.open();
     }
@@ -464,16 +439,14 @@ const Database = (() => {
      * tag matching baby-banking rows with channel='ecom'. So clearing 'ecom'
      * removes its import history and reverts those tags back to 'tienda'.
      *
-     * Settings (course start, ecom-per-KPI config, captacion aliases) are
-     * NEVER touched.
+     * Settings (course start, ecom-per-KPI config) are NEVER touched.
      */
     async function deleteBySource(source, onProgress) {
         if (!source) return { opsDeleted: 0, importsDeleted: 0, ecomUntagged: 0 };
 
         // Use filter + primaryKeys + bulkDelete instead of where('source').equals(...).delete().
-        // The source index was added in v5; older imported backups may have rows without
-        // a properly indexed source. The filter approach is bulletproof at the cost of a
-        // full table scan, which is fine here since the cleanup panel is occasional.
+        // The filter approach is bulletproof at the cost of a full table scan,
+        // which is fine here since the cleanup panel is occasional.
         if (onProgress) onProgress({ phase: 'scan', done: 0, total: 1 });
         const ids = source === 'ecom'
             ? await db.operations.filter(r => r.channel === 'ecom').primaryKeys()

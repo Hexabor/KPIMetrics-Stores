@@ -72,7 +72,7 @@
                     <button class="dash-card" data-action="go-dash-store">
                         <span class="dash-card-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polyline points="3 3 3 21 21 21"/><polyline points="7 14 11 10 15 12 21 6"/></svg></span>
                         <span class="dash-card-text">
-                            <span class="dash-card-name">Vista tienda/empleado</span>
+                            <span class="dash-card-name">Vista por tienda</span>
                             <small class="dash-card-hint">Evolucion semanal por KPI</small>
                         </span>
                     </button>
@@ -165,6 +165,7 @@
                                 <ul>
                                     <li>Branch que contenga <em>RMA</em>, <em>ES Ecomdistribution</em> o <em>ES Ecommerce</em> (no son tiendas fisicas)</li>
                                     <li>Type = <em>Transfer</em> (movimientos internos de stock). <strong>Excepcion</strong>: las filas Transfer cuya categoria es <em>Test</em>/<em>TEST</em> SI se importan, como admisiones a test (ver KPIs <em>Ordenes de test</em>, <em>Items admitidos</em> y <em>Ratio de ordenes de test</em>)</li>
+                                    <li>Columna <em>Staff</em> (esta edicion no guarda identificadores de empleado por GDPR)</li>
                                 </ul>
                                 <span class="info-pop-section">Campos y duplicados</span>
                                 <span>Solo se guardan campos relevantes para KPIs. Si reimportas un archivo, las filas que ya existian se detectan por Order Number + precio + categoria y se omiten.</span>
@@ -192,6 +193,7 @@
                                 <ul>
                                     <li>Branch que contenga <em>RMA</em>, <em>ES Ecomdistribution</em> o <em>ES Ecommerce</em> (no son tiendas fisicas)</li>
                                     <li>Type = <em>Transfer</em> (movimientos internos de stock). <strong>Excepcion</strong>: las filas Transfer cuya categoria es <em>Test</em>/<em>TEST</em> SI se importan, como admisiones a test (ver KPIs <em>Ordenes de test</em>, <em>Items admitidos</em> y <em>Ratio de ordenes de test</em>)</li>
+                                    <li>Columna <em>Staff</em> (esta edicion no guarda identificadores de empleado por GDPR)</li>
                                 </ul>
                                 <span class="info-pop-section">Campos y duplicados</span>
                                 <span>Solo se guardan campos relevantes para KPIs. Si reimportas un archivo, las filas que ya existian se detectan por Order Number + precio + categoria y se omiten.</span>
@@ -244,7 +246,7 @@
                                 <span class="info-pop-section info-pop-section-first">Como exportar</span>
                                 <span>En Looker, pestaña <strong>"New Store Membership"</strong>. <strong>Selecciona ambas regiones (ES + IC)</strong> y el rango de fechas. Exporta el CSV.</span>
                                 <span class="info-pop-section">Columnas usadas</span>
-                                <span><em>Branch</em>, <em>Staff</em>, <em>SubscriptionDate</em>. <em>Member Id</em> y <em>Operating Company</em> se descartan (no se guardan identificadores del socio).</span>
+                                <span><em>Branch</em>, <em>SubscriptionDate</em>. <em>Staff</em> (GDPR), <em>Member Id</em> y <em>Operating Company</em> se descartan (no se guardan identificadores del socio ni del empleado).</span>
                                 <span class="info-pop-section">Nombres de tienda</span>
                                 <span>Los nombres del CSV se reconcilian con Baby Banking automaticamente: se quita el prefijo <em>CeX</em> y se ignoran tildes, mayusculas y diferencias de espacios. Para discrepancias mayores edita <em>data/captacion-store-aliases.json</em>.</span>
                                 <span class="info-pop-section">Como se guarda</span>
@@ -442,10 +444,10 @@
                 <p>Proximamente. La sincronizacion con Google Drive se implementara en una futura version.</p>
             </div>
         </section>
-        <!-- DASHBOARD: STORE / STAFF (evolucion por KPI) -->
+        <!-- DASHBOARD: STORE (evolucion por KPI) -->
         <section id="section-dash-store" class="section hidden">
             <div class="section-header">
-                <h2>Vista tienda/empleado</h2>
+                <h2>Vista por tienda</h2>
                 <div class="available-weeks" id="evo-available"></div>
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
@@ -522,10 +524,6 @@
                             </div>
                         </div>
                         <input type="number" id="evo-min-ops" class="min-ops-input evo-single-only" min="1" value="10" placeholder="Min" title="Minimo de operaciones para incluir en ranking porcentual" disabled>
-                        <select id="evo-scope">
-                            <option value="staff">Por empleado</option>
-                            <option value="store">Por tienda</option>
-                        </select>
                         <select id="evo-top-n" class="evo-single-only">
                             <option value="all" selected>Todos</option>
                             <option value="3">Top 3</option>
@@ -537,15 +535,6 @@
                             <input type="text" class="search-select-input" id="kpi-panel-store" placeholder="Todas las tiendas" value="">
                             <div class="search-select-dropdown" id="kpi-panel-store-list"></div>
                         </div>
-                        <div class="search-select evo-staff-only hidden" id="kpi-panel-staff-wrap">
-                            <input type="text" class="search-select-input" id="kpi-panel-staff" placeholder="Todos los empleados" value="">
-                            <div class="search-select-dropdown" id="kpi-panel-staff-list"></div>
-                        </div>
-                        <label class="toggle-switch" title="Unificar empleados que aparecen en varias tiendas">
-                            <input type="checkbox" id="evo-merge-stores">
-                            <span class="toggle-slider"></span>
-                            <span class="toggle-label">Unificar</span>
-                        </label>
                     </div>
                 </div>
                 <div class="kpi-panel-week-range" id="kpi-panel-week-range"></div>

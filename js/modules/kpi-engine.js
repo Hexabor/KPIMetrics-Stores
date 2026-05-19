@@ -145,53 +145,6 @@ const KPIEngine = (() => {
         }
     });
 
-    // Sales by staff and period
-    register('sales-by-staff', {
-        name: 'Ventas por empleado',
-        description: 'Ventas desglosadas por empleado y periodo',
-        category: 'ventas',
-        calculate(data, params = {}) {
-            const period = params.period || 'week';
-            const sales = data.filter(r => r.type === 'sale');
-            const result = {};
-
-            for (const r of sales) {
-                const staff = r.staff || 'N/A';
-                const pk = periodKey(r.date, period);
-                if (!result[staff]) result[staff] = {};
-                if (!result[staff][pk]) result[staff][pk] = { count: 0, total: 0 };
-                result[staff][pk].count++;
-                result[staff][pk].total += (r.total || 0);
-            }
-            return result;
-        }
-    });
-
-    // Mobile sales by staff and week
-    // Categories: "Moviles - iPhone", "Moviles - Android"
-    register('mobile-sales-by-staff-week', {
-        name: 'Moviles vendidos por empleado/semana',
-        description: 'Total de moviles vendidos (Sale) por empleado, por semana de negocio',
-        category: 'ventas',
-        calculate(data) {
-            const mobileSales = data.filter(r =>
-                r.type === 'sale' &&
-                r.category && r.category.toLowerCase().startsWith('moviles')
-            );
-
-            const result = {};
-            for (const r of mobileSales) {
-                const staff = r.staff || 'N/A';
-                const wk = businessWeekKey(r.date);
-                if (!result[staff]) result[staff] = {};
-                if (!result[staff][wk]) result[staff][wk] = { count: 0, total: 0 };
-                result[staff][wk].count += (r.quantity || 0);
-                result[staff][wk].total += (r.total || 0);
-            }
-            return result;
-        }
-    });
-
     // Operations by type
     register('operations-by-type', {
         name: 'Operaciones por tipo',

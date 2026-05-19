@@ -53,13 +53,14 @@ describe('groupBy', () => {
 });
 
 describe('KPIs registrados - filtros por tipo de transaccion', () => {
+    // Edicion stores: las filas NO contienen staff.
     const data = [
-        { type: 'sale', total: 100, quantity: 1, category: 'Moviles - iPhone', staff: 'Ana', store: 'Madrid', date: '2026-01-17' },
-        { type: 'sale', total: 200, quantity: 2, category: 'Moviles - iPhone', staff: 'Bea', store: 'Madrid', date: '2026-01-17' },
-        { type: 'sale', total: 50, quantity: 1, category: 'Videojuegos', staff: 'Ana', store: 'Madrid', date: '2026-01-17' },
-        { type: 'refund', total: -50, quantity: 1, staff: 'Ana', store: 'Madrid', date: '2026-01-17' },
-        { type: 'cash buy', total: -80, quantity: 1, staff: 'Ana', store: 'Madrid', date: '2026-01-17' },
-        { type: 'exchange', total: -120, quantity: 1, staff: 'Ana', store: 'Madrid', date: '2026-01-17' }
+        { type: 'sale', total: 100, quantity: 1, category: 'Moviles - iPhone', store: 'Madrid', date: '2026-01-17' },
+        { type: 'sale', total: 200, quantity: 2, category: 'Moviles - iPhone', store: 'Madrid', date: '2026-01-17' },
+        { type: 'sale', total: 50, quantity: 1, category: 'Videojuegos', store: 'Madrid', date: '2026-01-17' },
+        { type: 'refund', total: -50, quantity: 1, store: 'Madrid', date: '2026-01-17' },
+        { type: 'cash buy', total: -80, quantity: 1, store: 'Madrid', date: '2026-01-17' },
+        { type: 'exchange', total: -120, quantity: 1, store: 'Madrid', date: '2026-01-17' }
     ];
 
     it('total-sales solo cuenta filas type=sale', () => {
@@ -92,22 +93,16 @@ describe('KPIs registrados - filtros por tipo de transaccion', () => {
         const netas = sales.total + refunds.total;
         expect(netas).toBe(300);
     });
+});
 
-    it('mobile-sales-by-staff-week solo cuenta categorias que empiezan por "Moviles"', () => {
-        const r = KPIEngine.calculate('mobile-sales-by-staff-week', data);
-        expect(r.Ana).toBeDefined();
-        expect(r.Bea).toBeDefined();
-
-        const wkAna = Object.keys(r.Ana)[0];
-        const wkBea = Object.keys(r.Bea)[0];
-
-        // Ana: 1 movil x 100€ (la venta de Videojuegos NO entra)
-        expect(r.Ana[wkAna].count).toBe(1);
-        expect(r.Ana[wkAna].total).toBe(100);
-
-        // Bea: 2 moviles x 200€ (count usa quantity, no nº de filas)
-        expect(r.Bea[wkBea].count).toBe(2);
-        expect(r.Bea[wkBea].total).toBe(200);
+describe('regresion GDPR: ningun KPI registrado depende de staff', () => {
+    it('no existe ningun KPI con "staff" o "empleado" en id o nombre', () => {
+        const ids = KPIEngine.getAll().map(k => k.id.toLowerCase());
+        const names = KPIEngine.getAll().map(k => k.name.toLowerCase());
+        expect(ids.some(id => id.includes('staff'))).toBe(false);
+        expect(ids.some(id => id.includes('empleado'))).toBe(false);
+        expect(names.some(n => n.includes('staff'))).toBe(false);
+        expect(names.some(n => n.includes('empleado'))).toBe(false);
     });
 });
 

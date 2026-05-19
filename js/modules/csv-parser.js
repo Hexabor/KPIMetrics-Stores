@@ -5,6 +5,9 @@
  * Real CSV columns from CeX Looker:
  *   Branch, Order Number, Staff, Order Dt, Transaction Type,
  *   Box ID, Box Name, SerialNo, Category, Till No, Quantity, Price
+ *
+ * Edicion stores (GDPR): la columna Staff del CSV se DESCARTA al importar
+ * y no se guarda en ninguna forma, en ninguna fuente. Ver CLAUDE.md.
  */
 const CSVParser = (() => {
 
@@ -12,11 +15,11 @@ const CSVParser = (() => {
     // Keys are matched case-insensitively against the CSV headers.
     // Covers both Baby Banking ES (Branch, Order Dt, Box ID, Box Name, Category)
     // and Baby Banking IC (branchname, order_date, box_id, box_name, boxcategory).
+    // Staff NO esta mapeado deliberadamente: aunque venga en el CSV, no entra.
     const DEFAULT_MAPPING = {
         'branch': 'store',
         'branchname': 'store',
         'order number': 'reference',
-        'staff': 'staff',
         'order dt': 'date',
         'order_date': 'date',
         'transaction type': 'type',
@@ -40,12 +43,11 @@ const CSVParser = (() => {
         reference: ['epos order', 'epos orderid']
     };
 
-    // Captacion (Store Memberships) mapping: only what we keep.
-    // Member Id and Operating Company are intentionally discarded for
-    // anonymization. Each row = 1 captured member by that staff on that date.
+    // Captacion (Store Memberships) mapping: solo lo que guardamos.
+    // Staff NO esta aqui por GDPR; Member Id y Operating Company tampoco
+    // (anonimizacion). Cada fila = 1 socio captado por esa tienda en esa fecha.
     const CAPTACION_MAPPING = {
         'branch': 'store',
-        'staff': 'staff',
         'subscriptiondate': 'date'
     };
 
@@ -165,12 +167,12 @@ const CSVParser = (() => {
     /**
      * Map a raw CSV row to our internal record format.
      * Only keeps fields needed for KPIs: reference, type, category,
-     * date, store, staff, quantity, price, total.
-     * Discards: product, serial, sku, till, _raw.
+     * date, store, quantity, price, total.
+     * Discards: product, serial, sku, till, staff, _raw.
      * Discards rows of type transfer (stock internal moves), EXCEPT those
      * with category "Test"/"TEST" — those are test admissions and we
      * remap their type to 'test-admission' so they survive the discard.
-     * Refunds ARE kept now (needed for net sales = gross - refunds).
+     * Refunds ARE kept (needed for net sales = gross - refunds).
      */
     function mapRecord(raw, mapping, source) {
         const record = {};
@@ -192,21 +194,24 @@ const CSVParser = (() => {
             if (!record.reference && !record.date) {
                 return null;
             }
+            // Defensa GDPR: si alguien mapea staff por error, lo borramos.
+            delete record.staff;
             return record;
         }
 
-        // Captacion (Store Memberships): each row = 1 member captured.
-        // We keep only store + staff + date. Member Id and Operating Company
-        // are intentionally discarded (anonymization).
+        // Captacion (Store Memberships): each row = 1 captured member at
+        // (store, date). Member Id, Operating Company y Staff se descartan
+        // siempre (anonimizacion + GDPR).
         if (source === 'captacion') {
             if (record.date) record.date = normalizeDate(record.date);
             if (record.store) {
-                // The captacion CSV prefixes branches with "CeX " (e.g. "CeX YORK"),
-                // while Baby Banking exports them without the prefix ("York").
-                // Strip the prefix so memberships join correctly with sales.
+                // El CSV de captacion prefija las branches con "CeX " (p.e. "CeX YORK"),
+                // mientras que Baby Banking las exporta sin el prefijo ("York").
+                // Quitamos el prefijo para que los socios crucen bien con las ventas.
                 record.store = record.store.trim().replace(/^CeX\s+/i, '');
             }
-            if (record.staff) record.staff = record.staff.trim();
+            // Defensa GDPR explicita en la rama captacion.
+            delete record.staff;
             // Skip rows with no usable data
             if (!record.date || !record.store) return null;
             record.type = 'membership';
@@ -260,11 +265,14 @@ const CSVParser = (() => {
 
         record.total = (record.quantity || 0) * (record.price || 0);
 
-        // Strip fields not needed for KPIs
+        // Strip fields not needed for KPIs. Staff es defensa GDPR: aunque alguien
+        // restaure manualmente 'Staff'->'staff' en el mapping desde la UI, este
+        // delete impide que el record final lo contenga.
         delete record.product;
         delete record.serial;
         delete record.sku;
         delete record.till;
+        delete record.staff;
 
         // Skip rows with no meaningful data
         if (!record.type && !record.date) {

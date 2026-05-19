@@ -4,6 +4,18 @@
  */
 const Changelog = [
     {
+        date: '19/05/2026 (sesion 1 — Stores Edition)',
+        items: [
+            { type: 'new', text: 'Bifurcacion: KPI Metrics 2026 edicion solo-tiendas (repo aparte: KPIMetrics-Stores). Version derivada de KPITool2026 que descarta el campo Staff del CSV y elimina toda la vista por empleado y los KPIs por staff. Captacion de socios y admision a test SIGUEN existiendo, pero ahora son siempre a nivel de tienda. Cumple GDPR: la base de datos local nunca contiene identificadores de empleado en ninguna fuente' },
+            { type: 'change', text: 'DB Dexie renombrada de "KPITool2026" a "KPIMetricsStores2026". Los backups exportados desde el repo padre NO son compatibles con esta edicion y no deben importarse. Schema v1 limpio (sin migraciones acumuladas, sin indices por staff)' },
+            { type: 'new', text: 'Tests de regresion GDPR: el parser nunca produce campo staff (ni en Baby Banking ni en captacion, incluso si el mapping lo incluye), y ningun KPI registrado contiene staff/empleado en id o nombre. Si alguien intenta reintroducir staff, los tests fallan al commitear (pre-commit hook)' },
+            { type: 'remove', text: 'Vista tienda/empleado pasa a llamarse "Vista por tienda". Fuera el selector scope (Por empleado / Por tienda), el buscador de empleados, el toggle "Unificar tiendas" y la atribucion por staff en el bucket. Cash buy / exchange / refund EUR vuelven a sumar siempre (la supresion era exclusiva de scope=staff)' },
+            { type: 'change', text: 'Captacion de socios: el importador, el KPI "Socios" y el reconciler de aliases de tienda se mantienen. Lo unico que cambia es que la columna Staff del CSV ya no se guarda (cada socio queda atribuido a tienda + fecha)' },
+            { type: 'change', text: 'Captacion almacenada agregada por (tienda, dia): una fila con quantity=N socios captados ese dia en esa tienda, en vez de N filas individuales. Compresion ~10x para esa fuente sin perder informacion (sin Order Number, Member Id ni Staff, las filas individuales eran indistinguibles)' },
+            { type: 'change', text: 'Admision a test: las filas Transfer/Test siguen sobreviviendo como type=test-admission y los KPIs Ordenes de test / Items admitidos / Ratio de ordenes de test se mantienen, ahora a nivel de tienda en vez de por staff' },
+        ]
+    },
+    {
         date: '05/05/2026 (sesion 9)',
         items: [
             { type: 'new', text: 'Configuracion: panel "Limpiar datos por fuente" (configuracion profunda). Permite borrar las filas y el historial de importaciones de UNA fuente concreta (Baby Banking ES, Baby Banking IC, Captacion, etc.) sin afectar a las demas ni a la configuracion. Para Ecom no hay filas propias: limpiarlo desetiqueta las filas Baby Banking marcadas como ecom y borra el historial de importaciones de Ecom. Confirmacion obligatoria. Nada que toque settings (course start, ecom-per-KPI, aliases de captacion)' },
