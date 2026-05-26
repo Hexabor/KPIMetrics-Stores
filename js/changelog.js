@@ -6,7 +6,9 @@ const Changelog = [
     {
         date: '26/05/2026 (sesion 2 — Stores Edition)',
         items: [
-            { type: 'new', text: 'Preparacion fase 3 (hosting en FTP propio): añadidos robots.txt, meta noindex/nofollow en index.html y plantilla de .htaccess con X-Robots-Tag, bloqueo de archivos sensibles y bloque Basic Auth listo para descomentar. Objetivo: que la herramienta corporativa pase totalmente desapercibida en buscadores antes de salir del hosting publico de GitHub Pages' },
+            { type: 'new', text: 'Fase 3 DESPLEGADA: la app esta corriendo en https://capimetrics.cexsv.com/ (FTP de Hostinger, dominio + HTTPS proporcionados por David). Subdominio interno corporativo. Bloqueo de indexacion verificado en produccion: robots.txt, meta noindex y header HTTP X-Robots-Tag activos via LiteSpeed' },
+            { type: 'new', text: 'Preparacion fase 3: añadidos robots.txt, meta noindex/nofollow en index.html y plantilla de .htaccess con X-Robots-Tag, bloqueo de archivos sensibles y bloque Basic Auth comentado. Objetivo: que la herramienta corporativa pase totalmente desapercibida en buscadores' },
+            { type: 'new', text: 'Schema MySQL definitivo (docs/db-schema-stores.sql) redactado para la stores edition. Adapta la propuesta corporativa del PDF (docs/db-schema.md) eliminando staff (GDPR), simplificando roles a admin/viewer y traduciendo a sintaxis MySQL. Listo para ejecutar en la BD u782235572_CPMT (vacia hasta hoy)' },
             { type: 'change', text: 'Hoja de ruta (CLAUDE.md) ampliada con el plan completo de auth para fase 4: Google OAuth + RBAC desde el dia uno (admin / viewer) sobre el schema MySQL. Decision firme: una sola app con roles, NO dos versiones del codigo' },
         ]
     },
