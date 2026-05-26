@@ -1,0 +1,67 @@
+# KPI Metrics 2026 - Stores Edition
+# Configuracion para hosting Apache (FTP propio).
+# Este archivo es ignorado por GitHub Pages; solo aplica al subir al FTP.
+
+# ============================================================
+# 1) Bloqueo de indexacion en buscadores (defensa en capas)
+# ============================================================
+# Header HTTP X-Robots-Tag — la capa mas fuerte, no se puede ignorar
+# tan facil como un meta tag. Aplica a TODAS las respuestas, incluso
+# para assets (JS/CSS) que no llevan meta tag.
+<IfModule mod_headers.c>
+    Header set X-Robots-Tag "noindex, nofollow, noarchive, nosnippet"
+</IfModule>
+
+# ============================================================
+# 2) Basic Auth (descomentar cuando este montado el .htpasswd)
+# ============================================================
+# Disuasion de acceso durante la fase de hosting estatico, antes
+# del backend con Google OAuth. Un solo nivel: todo el que entre
+# es "admin" de facto. Cosmetico, no es seguridad real.
+#
+# Pasos para activarlo:
+#   1. Generar .htpasswd fuera de la raiz web:
+#        htpasswd -c /ruta/segura/.htpasswd usuario1
+#        htpasswd    /ruta/segura/.htpasswd usuario2   (sin -c para añadir mas)
+#   2. Ajustar la ruta absoluta en AuthUserFile a la del FTP.
+#   3. Descomentar el bloque siguiente.
+#
+# <Files "*">
+#     AuthType Basic
+#     AuthName "KPI Metrics 2026 - Acceso restringido"
+#     AuthUserFile "/ruta/absoluta/en/el/ftp/.htpasswd"
+#     Require valid-user
+# </Files>
+
+# ============================================================
+# 3) Forzar HTTPS (descomentar si el FTP no lo fuerza ya)
+# ============================================================
+# <IfModule mod_rewrite.c>
+#     RewriteEngine On
+#     RewriteCond %{HTTPS} off
+#     RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
+
+# ============================================================
+# 4) Bloquear acceso a archivos sensibles
+# ============================================================
+# Bloquea dot-files (.git, .htaccess, .htpasswd, .gitignore, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Bloquea extensiones que no son para servir publicamente:
+# - .md: documentacion interna (CLAUDE.md, README.md, docs/spec-*.md)
+# - .sh / .sql: scripts
+# - .lock: lockfiles
+<FilesMatch "\.(md|sh|sql|lock)$">
+    Require all denied
+</FilesMatch>
+
+# Bloquea archivos concretos de metadata del proyecto
+<FilesMatch "^(package\.json|package-lock\.json|vitest\.config\.mjs)$">
+    Require all denied
+</FilesMatch>
+
+# Los JSON en data/ (categories-supercategories.json, captacion-store-aliases.json)
+# si se sirven — la app los carga via fetch() en runtime.

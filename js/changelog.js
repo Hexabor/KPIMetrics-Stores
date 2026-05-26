@@ -4,6 +4,13 @@
  */
 const Changelog = [
     {
+        date: '26/05/2026 (sesion 2 — Stores Edition)',
+        items: [
+            { type: 'new', text: 'Preparacion fase 3 (hosting en FTP propio): añadidos robots.txt, meta noindex/nofollow en index.html y plantilla de .htaccess con X-Robots-Tag, bloqueo de archivos sensibles y bloque Basic Auth listo para descomentar. Objetivo: que la herramienta corporativa pase totalmente desapercibida en buscadores antes de salir del hosting publico de GitHub Pages' },
+            { type: 'change', text: 'Hoja de ruta (CLAUDE.md) ampliada con el plan completo de auth para fase 4: Google OAuth + RBAC desde el dia uno (admin / viewer) sobre el schema MySQL. Decision firme: una sola app con roles, NO dos versiones del codigo' },
+        ]
+    },
+    {
         date: '19/05/2026 (sesion 1 — Stores Edition)',
         items: [
             { type: 'new', text: 'Bifurcacion: KPI Metrics 2026 edicion solo-tiendas (repo aparte: KPIMetrics-Stores). Version derivada de KPITool2026 que descarta el campo Staff del CSV y elimina toda la vista por empleado y los KPIs por staff. Captacion de socios y admision a test SIGUEN existiendo, pero ahora son siempre a nivel de tienda. Cumple GDPR: la base de datos local nunca contiene identificadores de empleado en ninguna fuente' },

@@ -75,6 +75,17 @@
 - Sin backend (de momento)
 
 ## Roadmap
+
 1. **Implementacion solo-tiendas**: completada (sesion 1 — 10/05/2026).
-2. **Siguiente fase**: subida estatica al FTP + dominio + HTTPS. Sigue siendo frontend puro, solo cambia de hosting.
-3. **Fase posterior**: backend MySQL en el FTP. Spec aparte: schema sin staff, endpoints, auth, integracion con la app. Dexie pasa a ser cache local o se retira segun como se diseñe.
+2. **GitHub Pages**: activado (19/05/2026) como hosting estatico interino. Repo publico `Hexabor/KPIMetrics-Stores`, branch `main`, path `/`.
+3. **Fase actual — Subida a FTP propio + dominio + HTTPS**: sigue siendo frontend puro, solo cambia de hosting. Incluye:
+   - **Disuasion de acceso (interim)**: `.htaccess` con Basic Auth — un solo nivel, todos los que entren son "admin" de facto. Es solo cosmetico; la seguridad real llega con el backend.
+   - **Bloqueo de indexacion (defensa en capas)** — objetivo: que la herramienta pase totalmente desapercibida en buscadores como herramienta corporativa interna:
+     - `robots.txt` en la raiz con `User-agent: *` + `Disallow: /`.
+     - `<meta name="robots" content="noindex, nofollow">` en `index.html`.
+     - `Header set X-Robots-Tag "noindex, nofollow"` en `.htaccess` (mas fuerte: header HTTP).
+     - El Basic Auth del punto anterior ya bloquea indexacion de facto; las tres capas anteriores son defensa adicional.
+     - Politica: no enlazar la URL desde redes/firmas/sitios publicos.
+4. **Fase posterior — Backend MySQL en el FTP**: spec aparte. Schema sin staff (GDPR — ver `docs/db-schema.md`, pendiente de adaptar a stores edition), endpoints, integracion con la app. Dexie pasa a ser cache local o se retira segun como se diseñe.
+   - **Autenticacion**: Google OAuth (login con cuenta Google). Verificacion del `id_token` en backend, sesiones reales. No tiene sentido implementarlo en la fase 3 (puramente frontend = cosmetico, cualquiera con DevTools lo salta y los datos siguen en IndexedDB sin proteccion).
+   - **RBAC desde dia uno**: minimo dos roles — `admin` (acceso total: importar, editar, configurar) y `viewer` (solo lectura, sin botones de importar/editar). Columna `role` ya prevista en `users` (`docs/db-schema.md` §3.2). La seguridad real vive en el backend rechazando POST/PUT sin permisos; el frontend solo oculta/deshabilita controles por UX. **Una sola app con roles, NO dos versiones del codigo** (duplicar = drift y doble mantenimiento).
