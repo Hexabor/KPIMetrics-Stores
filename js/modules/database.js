@@ -13,15 +13,34 @@ const Database = (() => {
     // invalidated on any mutation (bulk add, ecom tagging, bulk restore, clear).
     // The returned array is shared — callers must not mutate it in place.
     let opsCache = null;
+    let attachmentCache = null;
+    // Cache per-field para getDistinctValues. Walking a Dexie index para
+    // distintos es O(N) con N filas en la tabla; cacheamos para que la UI
+    // que rerenderiza tras cada accion (panel de grupos de tiendas en
+    // Configuracion, tipicamente) no pague el coste cada vez.
+    // Invalidamos en bloque con invalidateOpsCache porque cualquier mutacion
+    // sobre operations puede cambiar los distintos.
+    const distinctValuesCache = new Map();
 
     function invalidateOpsCache() {
         opsCache = null;
+        distinctValuesCache.clear();
+    }
+
+    function invalidateAttachmentCache() {
+        attachmentCache = null;
     }
 
     async function getAllOperations() {
         if (opsCache) return opsCache;
         opsCache = await db.operations.toArray();
         return opsCache;
+    }
+
+    async function getAllAttachmentWeekly() {
+        if (attachmentCache) return attachmentCache;
+        attachmentCache = await db.attachment_weekly.toArray();
+        return attachmentCache;
     }
 
     function init() {
@@ -33,7 +52,19 @@ const Database = (() => {
             settings: 'key'
         });
 
+        // v2: nueva tabla attachment_weekly (KPI Attachment). PK natural
+        // compuesta (store, cycleYear, week, source) — usamos esa cadena como
+        // clave primaria string para que upsert por put() sea trivial.
+        db.version(2).stores({
+            attachment_weekly: '&id, store, cycleYear, week, source, [store+cycleYear+week], [cycleYear+week]'
+        });
+
         return db;
+    }
+
+    // Construye la PK string de un registro attachment_weekly.
+    function attachmentKey(store, cycleYear, week, source) {
+        return `${store}|${cycleYear}|${week}|${source}`;
     }
 
     /**
@@ -62,6 +93,85 @@ const Database = (() => {
 
         invalidateOpsCache();
         return added;
+    }
+
+    /**
+     * Upsert weekly attachment rows. Each record is keyed by the natural
+     * PK (store, cycleYear, week, source) so re-importing the same week
+     * overwrites in place — no duplicates accumulate.
+     * Records expected: { store, cycleYear, week, source,
+     *                     saleTransactions, attachmentTransactions }.
+     * Defensa GDPR: el record no debe traer staff; si lo trae, se borra.
+     */
+    async function bulkPutAttachmentWeekly(records, onProgress) {
+        const BATCH_SIZE = 500;
+        let added = 0;
+        const rows = [];
+        for (const rec of records) {
+            // Defensa GDPR explicita: aunque el parser cambie en el futuro,
+            // staff nunca llega a IndexedDB.
+            delete rec.staff;
+            delete rec.staffId;
+            delete rec.staffName;
+            rows.push({
+                id: attachmentKey(rec.store, rec.cycleYear, rec.week, rec.source),
+                store: rec.store,
+                cycleYear: rec.cycleYear,
+                week: rec.week,
+                source: rec.source,
+                saleTransactions: rec.saleTransactions || 0,
+                attachmentTransactions: rec.attachmentTransactions || 0
+            });
+        }
+        for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+            const batch = rows.slice(i, i + BATCH_SIZE);
+            await db.attachment_weekly.bulkPut(batch);
+            added += batch.length;
+            if (onProgress) onProgress(added, rows.length);
+        }
+        invalidateAttachmentCache();
+        return added;
+    }
+
+    /**
+     * Renormalize store names across attachment_weekly rows whose source
+     * matches. Used when the reconciler picks up new aliases.
+     * Because store is part of the PK, a rename means delete-old + put-new
+     * (and potentially merge with an existing row at the new key).
+     */
+    async function renormalizeAttachmentStoresForSource(source, reconcileFn) {
+        if (!source || typeof reconcileFn !== 'function') return 0;
+        const rows = await getAllAttachmentWeekly();
+        const toUpdate = [];
+        for (const r of rows) {
+            if (r.source !== source) continue;
+            const canonical = reconcileFn(r.store);
+            if (canonical && canonical !== r.store) {
+                toUpdate.push({ old: r, newStore: canonical });
+            }
+        }
+        if (!toUpdate.length) return 0;
+        await db.transaction('rw', db.attachment_weekly, async () => {
+            for (const u of toUpdate) {
+                const newId = attachmentKey(u.newStore, u.old.cycleYear, u.old.week, u.old.source);
+                // Si ya existe una fila en la PK destino, fusionamos sumando.
+                const existing = await db.attachment_weekly.get(newId);
+                if (existing) {
+                    existing.saleTransactions += u.old.saleTransactions;
+                    existing.attachmentTransactions += u.old.attachmentTransactions;
+                    await db.attachment_weekly.put(existing);
+                } else {
+                    await db.attachment_weekly.put({
+                        ...u.old,
+                        id: newId,
+                        store: u.newStore
+                    });
+                }
+                await db.attachment_weekly.delete(u.old.id);
+            }
+        });
+        invalidateAttachmentCache();
+        return toUpdate.length;
     }
 
     /**
@@ -320,7 +430,10 @@ const Database = (() => {
     }
 
     async function getDistinctValues(field) {
-        return db.operations.orderBy(field).uniqueKeys();
+        if (distinctValuesCache.has(field)) return distinctValuesCache.get(field);
+        const values = await db.operations.orderBy(field).uniqueKeys();
+        distinctValuesCache.set(field, values);
+        return values;
     }
 
     async function queryOperations(filters = {}, page = 1, pageSize = 50) {
@@ -403,14 +516,17 @@ const Database = (() => {
         const operations = await db.operations.toArray();
         const imports = await db.imports.toArray();
         const settings = await db.settings.toArray();
-        return { operations, imports, settings, exportDate: new Date().toISOString() };
+        const attachment_weekly = await db.attachment_weekly.toArray();
+        return { operations, imports, settings, attachment_weekly, exportDate: new Date().toISOString() };
     }
 
     async function importAll(data, onProgress) {
         invalidateOpsCache();
+        invalidateAttachmentCache();
         await db.operations.clear();
         await db.imports.clear();
         await db.settings.clear();
+        await db.attachment_weekly.clear();
         if (data.operations && data.operations.length > 0) {
             const ops = data.operations;
             const BATCH = 5000;
@@ -421,10 +537,15 @@ const Database = (() => {
         }
         if (data.imports) await db.imports.bulkAdd(data.imports);
         if (data.settings) await db.settings.bulkAdd(data.settings);
+        // attachment_weekly puede no existir en backups previos a v2.
+        if (data.attachment_weekly && data.attachment_weekly.length > 0) {
+            await db.attachment_weekly.bulkPut(data.attachment_weekly);
+        }
     }
 
     async function clearAll() {
         invalidateOpsCache();
+        invalidateAttachmentCache();
         db.close();
         await Dexie.delete('KPIMetricsStores2026');
         init();
@@ -442,33 +563,55 @@ const Database = (() => {
      * Settings (course start, ecom-per-KPI config) are NEVER touched.
      */
     async function deleteBySource(source, onProgress) {
-        if (!source) return { opsDeleted: 0, importsDeleted: 0, ecomUntagged: 0 };
+        if (!source) return { opsDeleted: 0, importsDeleted: 0, ecomUntagged: 0, attachDeleted: 0 };
+
+        const isAttachment = source === 'attachment' || source === 'attachment-ic';
+
+        // Attachment vive en su propia tabla, no en operations.
+        let attachDeleted = 0;
+        if (isAttachment) {
+            if (onProgress) onProgress({ phase: 'scan', done: 0, total: 1 });
+            const attachIds = await db.attachment_weekly
+                .filter(r => r.source === source)
+                .primaryKeys();
+            const BATCH_A = 1000;
+            for (let i = 0; i < attachIds.length; i += BATCH_A) {
+                const chunk = attachIds.slice(i, i + BATCH_A);
+                await db.attachment_weekly.bulkDelete(chunk);
+                attachDeleted += chunk.length;
+                if (onProgress) onProgress({ phase: 'delete', done: attachDeleted, total: attachIds.length });
+            }
+            if (attachDeleted > 0) invalidateAttachmentCache();
+        }
 
         // Use filter + primaryKeys + bulkDelete instead of where('source').equals(...).delete().
         // The filter approach is bulletproof at the cost of a full table scan,
         // which is fine here since the cleanup panel is occasional.
-        if (onProgress) onProgress({ phase: 'scan', done: 0, total: 1 });
-        const ids = source === 'ecom'
-            ? await db.operations.filter(r => r.channel === 'ecom').primaryKeys()
-            : await db.operations.filter(r => r.source === source).primaryKeys();
-
-        // Delete in chunks so the UI gets meaningful progress updates and the
-        // event loop has a chance to repaint between batches. 5000 keeps each
-        // bulkDelete short on typical hardware.
-        const BATCH = 5000;
         let opsDeleted = 0;
         let ecomUntagged = 0;
-        for (let i = 0; i < ids.length; i += BATCH) {
-            const chunk = ids.slice(i, i + BATCH);
-            if (source === 'ecom') {
-                await db.operations.where('id').anyOf(chunk).modify({ channel: 'tienda' });
-                ecomUntagged += chunk.length;
-                if (onProgress) onProgress({ phase: 'untag', done: ecomUntagged, total: ids.length });
-            } else {
-                await db.operations.bulkDelete(chunk);
-                opsDeleted += chunk.length;
-                if (onProgress) onProgress({ phase: 'delete', done: opsDeleted, total: ids.length });
+        if (!isAttachment) {
+            if (onProgress) onProgress({ phase: 'scan', done: 0, total: 1 });
+            const ids = source === 'ecom'
+                ? await db.operations.filter(r => r.channel === 'ecom').primaryKeys()
+                : await db.operations.filter(r => r.source === source).primaryKeys();
+
+            // Delete in chunks so the UI gets meaningful progress updates and the
+            // event loop has a chance to repaint between batches. 5000 keeps each
+            // bulkDelete short on typical hardware.
+            const BATCH = 5000;
+            for (let i = 0; i < ids.length; i += BATCH) {
+                const chunk = ids.slice(i, i + BATCH);
+                if (source === 'ecom') {
+                    await db.operations.where('id').anyOf(chunk).modify({ channel: 'tienda' });
+                    ecomUntagged += chunk.length;
+                    if (onProgress) onProgress({ phase: 'untag', done: ecomUntagged, total: ids.length });
+                } else {
+                    await db.operations.bulkDelete(chunk);
+                    opsDeleted += chunk.length;
+                    if (onProgress) onProgress({ phase: 'delete', done: opsDeleted, total: ids.length });
+                }
             }
+            if (opsDeleted > 0 || ecomUntagged > 0) invalidateOpsCache();
         }
 
         if (onProgress) onProgress({ phase: 'imports', done: 0, total: 1 });
@@ -480,8 +623,7 @@ const Database = (() => {
             await db.imports.bulkDelete(importIds);
         }
 
-        if (opsDeleted > 0 || ecomUntagged > 0) invalidateOpsCache();
-        return { opsDeleted, importsDeleted, ecomUntagged };
+        return { opsDeleted, importsDeleted, ecomUntagged, attachDeleted };
     }
 
     /**
@@ -504,6 +646,20 @@ const Database = (() => {
                 if (!dateMax[src] || r.date > dateMax[src]) dateMax[src] = r.date;
             }
             if (r.channel === 'ecom') ecomTaggedCount++;
+        }
+
+        // Attachment vive en su propia tabla. No tiene "date" sino (cycleYear, week).
+        // El panel de limpieza solo necesita rowCount por fuente y, opcionalmente,
+        // un rango legible — devolvemos cycleYear/week min/max como meta.
+        const attachRows = await getAllAttachmentWeekly();
+        const attachWeekMin = {};
+        const attachWeekMax = {};
+        for (const r of attachRows) {
+            const src = r.source || 'unknown';
+            counts[src] = (counts[src] || 0) + 1;
+            const key = `${r.cycleYear}-W${String(r.week).padStart(2, '0')}`;
+            if (!attachWeekMin[src] || key < attachWeekMin[src]) attachWeekMin[src] = key;
+            if (!attachWeekMax[src] || key > attachWeekMax[src]) attachWeekMax[src] = key;
         }
 
         // Ecom has no rows of its own; surface its presence via imports +
@@ -531,7 +687,9 @@ const Database = (() => {
                 importCount: importCountBySource[src] || 0,
                 dateFrom: dateMin[src] || importDateMin[src] || null,
                 dateTo: dateMax[src] || importDateMax[src] || null,
-                ecomTaggedCount: src === 'ecom' ? ecomTaggedCount : 0
+                ecomTaggedCount: src === 'ecom' ? ecomTaggedCount : 0,
+                weekFrom: attachWeekMin[src] || null,
+                weekTo: attachWeekMax[src] || null
             };
         }
         return result;
@@ -540,8 +698,12 @@ const Database = (() => {
     return {
         init,
         getAllOperations,
+        getAllAttachmentWeekly,
         invalidateOpsCache,
+        invalidateAttachmentCache,
         bulkAddOperations,
+        bulkPutAttachmentWeekly,
+        renormalizeAttachmentStoresForSource,
         replaceOperationsByDateRange,
         renormalizeStoresForSource,
         logImport,

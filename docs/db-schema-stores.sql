@@ -19,6 +19,10 @@
 --     (las filas Transfer puras se descartan al importar; las
 --      Transfer + categoria 'Test' se importan como 'test-admission').
 --   - Sintaxis MySQL en lugar de PostgreSQL (Anexo del PDF).
+--   - Nueva tabla attachment_weekly y nueva fuente attachment-ic
+--     para el KPI de Attachment (% de ventas en tienda hechas con socio).
+--     El CSV de Looker viene agregado por (region, year, week, staff, store);
+--     se descarta staff (GDPR) y se agrega a (store, cycle_year, week, source).
 --
 -- Como ejecutar:
 --   1. Conecta a la BD via phpMyAdmin (Hostinger panel) o un
@@ -31,6 +35,7 @@
 -- las eliminamos en orden inverso de dependencia.
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS `settings`;
+DROP TABLE IF EXISTS `attachment_weekly`;
 DROP TABLE IF EXISTS `operations`;
 DROP TABLE IF EXISTS `imports`;
 DROP TABLE IF EXISTS `user_stores`;
@@ -113,7 +118,7 @@ CREATE TABLE `imports` (
     PRIMARY KEY (`id`),
     KEY `idx_imports_source_date` (`source`, `imported_at`),
     CONSTRAINT `fk_imports_user` FOREIGN KEY (`imported_by`) REFERENCES `users`(`id`) ON DELETE SET NULL,
-    CONSTRAINT `chk_imports_source` CHECK (`source` IN ('baby-banking', 'baby-banking-ic', 'ecom', 'captacion', 'attachment'))
+    CONSTRAINT `chk_imports_source` CHECK (`source` IN ('baby-banking', 'baby-banking-ic', 'ecom', 'captacion', 'attachment', 'attachment-ic'))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 
@@ -153,8 +158,42 @@ CREATE TABLE `operations` (
     CONSTRAINT `fk_ops_store`   FOREIGN KEY (`store_id`)  REFERENCES `stores`(`id`),
     CONSTRAINT `fk_ops_import`  FOREIGN KEY (`import_id`) REFERENCES `imports`(`id`) ON DELETE SET NULL,
     CONSTRAINT `chk_ops_type`   CHECK (`type` IN ('Sale', 'Cash Buy', 'Exchange', 'Refund', 'RMA', 'test-admission', 'membership')),
-    CONSTRAINT `chk_ops_source` CHECK (`source` IN ('baby-banking', 'baby-banking-ic', 'ecom', 'captacion', 'attachment')),
+    -- 'attachment' / 'attachment-ic' NO aparecen aqui: esa fuente NO escribe
+    -- en operations, va a su propia tabla attachment_weekly (granularidad
+    -- semanal, no diaria).
+    CONSTRAINT `chk_ops_source` CHECK (`source` IN ('baby-banking', 'baby-banking-ic', 'ecom', 'captacion')),
     CONSTRAINT `chk_ops_channel` CHECK (`channel` IN ('tienda', 'ecom'))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+
+-- =============================================================
+-- Tabla: attachment_weekly - Agregado semanal del KPI Attachment
+-- Granularidad: (tienda, ciclo, semana, fuente). El CSV de Looker llega
+-- por staff/semana; el importador descarta staff (GDPR) y suma a este nivel.
+-- Notas:
+--   - cycle_year es el AÑO DEL CICLO CeX, no el calendario natural: W1 del
+--     ciclo 2026 cae en sabado 27/12/2025, por eso conviene el matiz.
+--   - source = 'attachment' (Peninsula+Baleares) o 'attachment-ic' (Canarias).
+--     El CSV trae ES + IC juntos; el parser separa por columna Region.
+--   - El % se DERIVA en query (attachment_transactions / sale_transactions);
+--     no se guarda el porcentaje precalculado del CSV.
+--   - chk_attach_qty: attachment_transactions nunca puede superar al total.
+-- =============================================================
+CREATE TABLE `attachment_weekly` (
+    `store_id`                INT UNSIGNED      NOT NULL,
+    `cycle_year`              SMALLINT UNSIGNED NOT NULL,
+    `week`                    SMALLINT UNSIGNED NOT NULL,
+    `source`                  VARCHAR(20)       NOT NULL,
+    `sale_transactions`       INT UNSIGNED      NOT NULL,
+    `attachment_transactions` INT UNSIGNED      NOT NULL,
+    `import_id`               BIGINT UNSIGNED   NULL,
+    `created_at`              TIMESTAMP         NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`store_id`, `cycle_year`, `week`, `source`),
+    KEY `idx_attach_week` (`cycle_year`, `week`),
+    CONSTRAINT `fk_attach_store`   FOREIGN KEY (`store_id`)  REFERENCES `stores`(`id`),
+    CONSTRAINT `fk_attach_import`  FOREIGN KEY (`import_id`) REFERENCES `imports`(`id`) ON DELETE SET NULL,
+    CONSTRAINT `chk_attach_source` CHECK (`source` IN ('attachment', 'attachment-ic')),
+    CONSTRAINT `chk_attach_qty`    CHECK (`attachment_transactions` <= `sale_transactions`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 

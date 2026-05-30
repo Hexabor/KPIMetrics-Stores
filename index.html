@@ -256,12 +256,30 @@
                         </button>
                     </span>
                 </div>
-                <div class="import-zone disabled" data-source="attachment" title="Proximamente: % de ventas en tienda realizadas con socio. Mismo Looker que captacion, pestana 'Store Membership Attachment', ES + IC.">
+                <div class="import-zone" data-source="attachment">
                     <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="19" y1="5" x2="5" y2="19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></svg></span>
                     <strong>Attachment</strong>
                     <small>% ventas con socio</small>
-                    <small class="drop-zone-hint">Proximamente</small>
-                    <input type="file" accept=".csv,.txt" hidden disabled>
+                    <input type="file" accept=".csv,.txt" hidden>
+                    <span class="import-zone-footer">
+                        <a class="import-zone-link" href="https://datastudio.google.com/reporting/8a6970ac-ace3-48b0-86cf-2465fca839ec/page/p_2extbfwkbd?s=jw6LzMhhzWg" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            Descargar CSV
+                        </a>
+                        <button type="button" class="info-btn" aria-label="Informacion sobre Attachment" onclick="event.stopPropagation()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                            <span class="info-pop">
+                                <span class="info-pop-section info-pop-section-first">Como exportar</span>
+                                <span>En Looker, pestaña <strong>"Store Membership Attachment"</strong>. <strong>Selecciona ambas regiones (ES + IC)</strong> y el rango de semanas. Exporta el CSV.</span>
+                                <span class="info-pop-section">Columnas usadas</span>
+                                <span><em>Region</em>, <em>Year</em>, <em>Week</em>, <em>StoreName</em>, <em>Transactions</em>, <em>Attachment</em>. <em>Month</em>, <em>OperatingCompany</em>, <em>StaffID</em>, <em>StaffName</em> y <em>Percentage</em> se descartan (anonimizacion + % recalculado a nivel tienda).</span>
+                                <span class="info-pop-section">Como se guarda</span>
+                                <span>Agregado por <strong>(tienda, semana, fuente)</strong> sumando los contadores de todos los staff. ES y IC se separan en fuentes distintas (Region). Re-importar la misma semana <strong>sobreescribe</strong> sin duplicar.</span>
+                                <span class="info-pop-section">Cross-check</span>
+                                <span>Al importar se comparan las <em>Transactions</em> del CSV con los tickets de venta de Baby Banking (mismo store/semana, solo tienda — sin ecom). Es un aviso informativo: si no cuadran, suele indicar desalineacion entre la numeracion de semanas de Looker y el calendario CeX (sabado-viernes).</span>
+                            </span>
+                        </button>
+                    </span>
                 </div>
                 <div class="import-zone disabled" data-source="stocks" title="Proximamente: exportacion de stock desde AIO">
                     <span class="import-zone-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></span>
@@ -356,93 +374,193 @@
                 <h2>Configuracion</h2>
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
-            <div class="settings-group">
-                <h3>Calendario de negocio</h3>
-                <p>Las semanas van de sabado a viernes. La semana 1 empieza en la fecha indicada.</p>
-                <div style="display:flex; gap:1rem; align-items:center; margin-top:0.5rem;">
-                    <label for="course-start-date">Inicio del curso (sabado):</label>
-                    <input type="text" id="course-start-date" value="27/12/2025" placeholder="DD/MM/AAAA" pattern="\d{2}/\d{2}/\d{4}" maxlength="10" style="width:130px;">
-                    <button class="btn btn-primary" id="btn-save-course-start">Guardar</button>
+
+            <nav class="settings-tabs" role="tablist" aria-label="Pestanas de configuracion">
+                <button type="button" class="settings-tab-btn active" role="tab" data-settings-tab="calendario" aria-selected="true">Calendario</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="ecom" aria-selected="false">Filtro ecom por KPI</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="captacion" aria-selected="false">Renombrado captacion</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="grupos" aria-selected="false">Grupos de tiendas</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="familias" aria-selected="false">Familias de categorias</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="mantenimiento" aria-selected="false">Mantenimiento</button>
+            </nav>
+
+            <div class="settings-panel" data-settings-panel="calendario" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Calendario de negocio</h3>
+                    <p>Las semanas van de sabado a viernes. La semana 1 empieza en la fecha indicada.</p>
+                    <div style="display:flex; gap:1rem; align-items:center; margin-top:0.5rem;">
+                        <label for="course-start-date">Inicio del curso (sabado):</label>
+                        <input type="text" id="course-start-date" value="27/12/2025" placeholder="DD/MM/AAAA" pattern="\d{2}/\d{2}/\d{4}" maxlength="10" style="width:130px;">
+                        <button class="btn btn-primary" id="btn-save-course-start">Guardar</button>
+                    </div>
+                    <p id="course-start-info" style="margin-top:0.5rem; font-style:italic;"></p>
                 </div>
-                <p id="course-start-info" style="margin-top:0.5rem; font-style:italic;"></p>
             </div>
-            <div class="settings-group">
-                <h3>Filtro ecom por KPI</h3>
-                <p>Marca los KPIs que deben excluir las &oacute;rdenes e-commerce. Los KPIs de volumen total (ventas, art&iacute;culos) suelen incluir ecom; los de comportamiento presencial (tickets, % venta complementaria, % gel/m&oacute;vil) suelen excluirlo.</p>
-                <div class="kpi-ecom-config" id="kpi-ecom-config"></div>
+
+            <div class="settings-panel hidden" data-settings-panel="ecom" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Filtro ecom por KPI</h3>
+                    <p>Marca los KPIs que deben excluir las &oacute;rdenes e-commerce. Los KPIs de volumen total (ventas, art&iacute;culos) suelen incluir ecom; los de comportamiento presencial (tickets, % venta complementaria, % gel/m&oacute;vil) suelen excluirlo.</p>
+                    <div class="kpi-ecom-config" id="kpi-ecom-config"></div>
+                </div>
             </div>
-            <div class="settings-group">
-                <h3>Base de datos</h3>
-                <p id="settings-db-info">Cargando info...</p>
+
+            <div class="settings-panel hidden" data-settings-panel="captacion" role="tabpanel">
+                <div class="settings-group settings-deep">
+                    <h3>Renombrado de tiendas en captacion <span class="settings-deep-badge">configuracion profunda</span></h3>
+                    <p class="settings-warning">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:0.25rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <strong>Antes de tocar nada, avisa al desarrollador</strong>:
+                        <a href="mailto:abeatrice@webuy.com?subject=KPI%20Metrics%20%E2%80%94%20renombrado%20de%20tienda" class="settings-warning-link">abeatrice@webuy.com</a>.
+                        Un alias mal configurado puede desviar socios silenciosamente a otra tienda o hacer que no se cuenten.
+                    </p>
+                    <details class="alias-details">
+                        <summary>Mostrar editor de aliases</summary>
+                        <p>Los nombres del CSV de captacion se reconcilian con Baby Banking automaticamente cuando solo difieren en tildes, mayusculas o espacios. Para discrepancias mayores (palabras distintas, erratas) se necesita un alias manual. Hay un set de fabrica precargado y aqui puedes anadir o sobrescribir entradas.</p>
+                        <div class="alias-editor">
+                            <table class="alias-table">
+                                <thead>
+                                    <tr>
+                                        <th>Nombre en CSV captacion</th>
+                                        <th>Nombre canonico (Baby Banking)</th>
+                                        <th>Origen</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alias-table-body">
+                                    <tr><td colspan="4" class="empty-msg">Cargando...</td></tr>
+                                </tbody>
+                            </table>
+                            <div class="alias-add-row">
+                                <input type="text" id="alias-new-key" placeholder="Nombre tal como llega en el CSV">
+                                <input type="text" id="alias-new-value" placeholder="Nombre canonico en Baby Banking">
+                                <button type="button" class="btn btn-secondary" id="btn-alias-add">Anadir alias</button>
+                            </div>
+                        </div>
+                    </details>
+                </div>
             </div>
-            <div class="settings-group settings-deep">
-                <h3>Renombrado de tiendas en captacion <span class="settings-deep-badge">configuracion profunda</span></h3>
-                <p class="settings-warning">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:0.25rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    <strong>Antes de tocar nada, avisa al desarrollador</strong>:
-                    <a href="mailto:abeatrice@webuy.com?subject=KPI%20Metrics%20%E2%80%94%20renombrado%20de%20tienda" class="settings-warning-link">abeatrice@webuy.com</a>.
-                    Un alias mal configurado puede desviar socios silenciosamente a otra tienda o hacer que no se cuenten.
-                </p>
-                <details class="alias-details">
-                    <summary>Mostrar editor de aliases</summary>
-                    <p>Los nombres del CSV de captacion se reconcilian con Baby Banking automaticamente cuando solo difieren en tildes, mayusculas o espacios. Para discrepancias mayores (palabras distintas, erratas) se necesita un alias manual. Hay un set de fabrica precargado y aqui puedes anadir o sobrescribir entradas.</p>
-                    <div class="alias-editor">
+
+            <div class="settings-panel hidden" data-settings-panel="grupos" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Grupos de tiendas</h3>
+                    <p>Presets reutilizables para filtrar varias tiendas a la vez. Se aplican desde el selector "Aplicar grupo" en Vista general y Vista detalle. Los cambios se guardan automaticamente y son visibles en todas las vistas.</p>
+                    <div id="settings-store-groups-editor" class="settings-families">
+                        <div class="families-section">
+                            <h4 class="families-subhead">Grupos <span class="families-subhead-hint">— pulsa uno para editar sus tiendas</span></h4>
+                            <div id="settings-store-groups-list" class="families-list">
+                                <div class="empty-msg">Cargando...</div>
+                            </div>
+                            <div class="families-add">
+                                <input type="text" id="settings-group-new-name" placeholder="Nombre del grupo nuevo">
+                                <button type="button" class="btn btn-secondary" id="btn-settings-group-add">Anadir grupo</button>
+                            </div>
+                        </div>
+                        <div class="families-section family-editor-section">
+                            <div class="family-editor-head">
+                                <h4 class="families-subhead" id="settings-group-editor-title">Tiendas</h4>
+                                <span class="family-editor-meta" id="settings-group-editor-meta"></span>
+                                <button type="button" class="family-btn hidden" id="btn-settings-group-rename" title="Renombrar grupo activo">Renombrar</button>
+                            </div>
+                            <div class="families-controls">
+                                <input type="text" id="settings-groups-store-search" placeholder="Buscar en este grupo..." class="input-search">
+                            </div>
+                            <div id="settings-group-store-chips" class="family-cat-chips">
+                                <div class="empty-msg">Selecciona un grupo arriba para editar sus tiendas.</div>
+                            </div>
+                            <div id="settings-group-picker-wrap" class="store-picker hidden">
+                                <div class="store-picker-head">
+                                    <h4 class="families-subhead">Catalogo de tiendas <span class="families-subhead-hint">— pulsa para anadir o quitar del grupo</span></h4>
+                                </div>
+                                <div id="settings-group-picker" class="store-picker-grid"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-panel hidden" data-settings-panel="familias" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Familias de categorias</h3>
+                    <p>Agrupan las categorias de producto (iPhone, Audifonos, PlayStation, ...) en bloques mayores (Movil, Audio, Gaming, ...) para los analisis de Vista detalle. Hay un set de fabrica precargado; aqui puedes anadir familias propias, eliminar las que no uses o reasignar categorias a otra familia.</p>
+                    <div id="settings-families-editor" class="settings-families">
+                        <div class="families-section">
+                            <h4 class="families-subhead">Familias <span class="families-subhead-hint">— pulsa una para editar sus categorias</span></h4>
+                            <div id="settings-families-list" class="families-list">
+                                <div class="empty-msg">Cargando...</div>
+                            </div>
+                            <div class="families-add">
+                                <input type="text" id="settings-family-new-name" placeholder="Nombre de la familia nueva">
+                                <button type="button" class="btn btn-secondary" id="btn-settings-family-add">Anadir familia</button>
+                            </div>
+                        </div>
+                        <div class="families-section family-editor-section">
+                            <div class="family-editor-head">
+                                <h4 class="families-subhead" id="settings-family-editor-title">Categorias</h4>
+                                <span class="family-editor-meta" id="settings-family-editor-meta"></span>
+                            </div>
+                            <div class="families-controls">
+                                <input type="text" id="settings-families-cat-search" placeholder="Buscar en esta familia..." class="input-search">
+                                <label class="families-filter">
+                                    <input type="checkbox" id="settings-families-only-overrides">
+                                    <span>Solo modificadas</span>
+                                </label>
+                            </div>
+                            <div id="settings-categories-list" class="family-cat-chips">
+                                <div class="empty-msg">Selecciona una familia arriba para editar sus categorias.</div>
+                            </div>
+                            <div id="settings-family-add-row" class="family-add-row hidden">
+                                <label for="settings-family-add-select">Anadir categoria:</label>
+                                <select id="settings-family-add-select" class="family-add-select">
+                                    <option value="">+ Anadir categoria...</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="settings-panel hidden" data-settings-panel="mantenimiento" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Base de datos</h3>
+                    <p id="settings-db-info">Cargando info...</p>
+                </div>
+                <div class="settings-group settings-deep">
+                    <h3>Limpiar datos por fuente <span class="settings-deep-badge">configuracion profunda</span></h3>
+                    <p class="settings-warning">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:0.25rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <strong>Operacion irreversible</strong>. Borra los datos importados de una fuente concreta sin afectar a las demas ni a la configuracion.
+                        <strong>Antes de tocar nada</strong>, exporta un backup JSON desde el inicio (icono de descarga) por si necesitas volver atras.
+                    </p>
+                    <details class="alias-details">
+                        <summary>Mostrar fuentes</summary>
+                        <p>Para "Ecom Sales" no hay filas propias en la base de datos: las ordenes ecom se reconocen marcando filas de Baby Banking. Limpiar Ecom <em>desetiqueta</em> esas filas (vuelven a contar como tienda) y borra el historial de importaciones de Ecom.</p>
                         <table class="alias-table">
                             <thead>
                                 <tr>
-                                    <th>Nombre en CSV captacion</th>
-                                    <th>Nombre canonico (Baby Banking)</th>
-                                    <th>Origen</th>
+                                    <th>Fuente</th>
+                                    <th>Filas</th>
+                                    <th>Importaciones</th>
+                                    <th>Rango</th>
                                     <th></th>
                                 </tr>
                             </thead>
-                            <tbody id="alias-table-body">
-                                <tr><td colspan="4" class="empty-msg">Cargando...</td></tr>
+                            <tbody id="cleanup-source-tbody">
+                                <tr><td colspan="5" class="empty-msg">Cargando...</td></tr>
                             </tbody>
                         </table>
-                        <div class="alias-add-row">
-                            <input type="text" id="alias-new-key" placeholder="Nombre tal como llega en el CSV">
-                            <input type="text" id="alias-new-value" placeholder="Nombre canonico en Baby Banking">
-                            <button type="button" class="btn btn-secondary" id="btn-alias-add">Anadir alias</button>
-                        </div>
-                    </div>
-                </details>
-            </div>
-            <div class="settings-group settings-deep">
-                <h3>Limpiar datos por fuente <span class="settings-deep-badge">configuracion profunda</span></h3>
-                <p class="settings-warning">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px; margin-right:0.25rem;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                    <strong>Operacion irreversible</strong>. Borra los datos importados de una fuente concreta sin afectar a las demas ni a la configuracion.
-                    <strong>Antes de tocar nada</strong>, exporta un backup JSON desde el inicio (icono de descarga) por si necesitas volver atras.
-                </p>
-                <details class="alias-details">
-                    <summary>Mostrar fuentes</summary>
-                    <p>Para "Ecom Sales" no hay filas propias en la base de datos: las ordenes ecom se reconocen marcando filas de Baby Banking. Limpiar Ecom <em>desetiqueta</em> esas filas (vuelven a contar como tienda) y borra el historial de importaciones de Ecom.</p>
-                    <table class="alias-table">
-                        <thead>
-                            <tr>
-                                <th>Fuente</th>
-                                <th>Filas</th>
-                                <th>Importaciones</th>
-                                <th>Rango</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="cleanup-source-tbody">
-                            <tr><td colspan="5" class="empty-msg">Cargando...</td></tr>
-                        </tbody>
-                    </table>
-                </details>
-            </div>
-            <div class="settings-group settings-danger">
-                <h3>Restablecer herramienta</h3>
-                <p>Esto eliminara todos los datos importados, el historial de importaciones y la configuracion. La herramienta volvera a su estado inicial.</p>
-                <p><strong>Si primero exportas un backup JSON, podras restaurar todos los datos despues.</strong></p>
-                <button class="btn btn-danger" id="btn-reset-tool">Restablecer todo</button>
-            </div>
-            <div class="settings-group settings-disabled" title="Proximamente: sincronizacion con Google Drive">
-                <h3>Google Drive</h3>
-                <p>Proximamente. La sincronizacion con Google Drive se implementara en una futura version.</p>
+                    </details>
+                </div>
+                <div class="settings-group settings-danger">
+                    <h3>Restablecer herramienta</h3>
+                    <p>Esto eliminara todos los datos importados, el historial de importaciones y la configuracion. La herramienta volvera a su estado inicial.</p>
+                    <p><strong>Si primero exportas un backup JSON, podras restaurar todos los datos despues.</strong></p>
+                    <button class="btn btn-danger" id="btn-reset-tool">Restablecer todo</button>
+                </div>
+                <div class="settings-group settings-disabled" title="Proximamente: sincronizacion con Google Drive">
+                    <h3>Google Drive</h3>
+                    <p>Proximamente. La sincronizacion con Google Drive se implementara en una futura version.</p>
+                </div>
             </div>
         </section>
         <!-- DASHBOARD: STORE (evolucion por KPI) -->
@@ -489,6 +607,9 @@
                             </optgroup>
                             <optgroup label="Captacion">
                                 <option value="memberships">Socios</option>
+                                <option value="attachPct">% Attachment</option>
+                                <option value="attachWithMember">Ventas con socio</option>
+                                <option value="attachTxs">Transacciones (attachment)</option>
                             </optgroup>
                             <optgroup label="Admision a test">
                                 <option value="testOrders">Ordenes de test</option>
@@ -612,10 +733,7 @@
                                         <select id="dg-groups-select" class="store-groups-select">
                                             <option value="">-- Aplicar grupo --</option>
                                         </select>
-                                        <button type="button" class="btn btn-secondary btn-xs" id="dg-groups-save" title="Guardar seleccion actual como grupo">+ Guardar</button>
                                     </div>
-                                    <button type="button" class="store-groups-manage-toggle" id="dg-groups-manage">Gestionar grupos...</button>
-                                    <div class="store-groups-list hidden" id="dg-groups-list"></div>
                                 </div>
                                 <label class="multi-select-all">
                                     <input type="checkbox" id="dg-store-all">
@@ -723,10 +841,7 @@
                                         <select id="dd-groups-select" class="store-groups-select">
                                             <option value="">-- Aplicar grupo --</option>
                                         </select>
-                                        <button type="button" class="btn btn-secondary btn-xs" id="dd-groups-save" title="Guardar seleccion actual como grupo">+ Guardar</button>
                                     </div>
-                                    <button type="button" class="store-groups-manage-toggle" id="dd-groups-manage">Gestionar grupos...</button>
-                                    <div class="store-groups-list hidden" id="dd-groups-list"></div>
                                 </div>
                                 <label class="multi-select-all">
                                     <input type="checkbox" id="dd-store-all">

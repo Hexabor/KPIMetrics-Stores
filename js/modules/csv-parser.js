@@ -51,7 +51,39 @@ const CSVParser = (() => {
         'subscriptiondate': 'date'
     };
 
+    // Attachment (Store Membership Attachment) mapping: granularidad
+    // (region, year, week, store) tras descartar staff.
+    // CSV columns: Region, Year, Month, Week, OperatingCompany, StoreName,
+    //   StaffID, StaffName, Percentage, Transactions, Attachment.
+    // Lo que NO esta mapeado se descarta:
+    //   - Month: derivable de (cycleYear, week).
+    //   - OperatingCompany: redundante con Region.
+    //   - StaffID/StaffName: GDPR (no se guarda).
+    //   - Percentage: derivado en query (no se almacena el precalculado).
+    const ATTACHMENT_MAPPING = {
+        'region': 'region',
+        'year': 'cycleYear',
+        'week': 'week',
+        'storename': 'store',
+        'transactions': 'saleTransactions',
+        'attachment': 'attachmentTransactions'
+    };
+
     let columnMapping = { ...DEFAULT_MAPPING };
+
+    /**
+     * Heuristica para descartar nombres de "tienda" que en realidad son
+     * departamentos centrales: RMA (servicios postventa), Ecomdistribution
+     * (almacen e-commerce), Ecommerce/Commerce (departamento de venta online).
+     * Aplica tanto a Baby Banking como a Attachment (CeX los mezcla en
+     * algunas fuentes). "commerce" cubre las variantes "Ecommerce" (que ya
+     * lo contiene) y "ES Commerce" (la que aparece en el CSV de attachment).
+     */
+    function isNonStoreDept(storeName) {
+        if (!storeName) return false;
+        const s = String(storeName).trim().toLowerCase();
+        return s.includes('rma') || s.includes('ecomdistribution') || s.includes('commerce');
+    }
 
     /** Update column mapping */
     function setMapping(mapping) {
@@ -111,6 +143,16 @@ const CSVParser = (() => {
                 const normalized = header.trim().toLowerCase();
                 if (CAPTACION_MAPPING[normalized]) {
                     detected[header] = CAPTACION_MAPPING[normalized];
+                }
+            }
+            return detected;
+        }
+
+        if (source === 'attachment') {
+            for (const header of headers) {
+                const normalized = header.trim().toLowerCase();
+                if (ATTACHMENT_MAPPING[normalized]) {
+                    detected[header] = ATTACHMENT_MAPPING[normalized];
                 }
             }
             return detected;
@@ -199,6 +241,39 @@ const CSVParser = (() => {
             return record;
         }
 
+        // Attachment (Store Membership Attachment): cada fila trae los
+        // contadores semanales de UN staff en UNA tienda. Aqui descartamos
+        // staff y devolvemos los contadores brutos junto con region/cycleYear/
+        // week/store; la agregacion por (store, semana) la hace el confirm
+        // flow en app.js. La columna source destino ('attachment' vs
+        // 'attachment-ic') se decide alli a partir de region.
+        if (source === 'attachment') {
+            // Defensa GDPR explicita en la rama attachment.
+            delete record.staff;
+            delete record.staffId;
+            delete record.staffName;
+            const region = (record.region || '').trim().toUpperCase();
+            const cycleYear = parseInt(record.cycleYear, 10);
+            const week = parseInt(record.week, 10);
+            const sale = parseInt(record.saleTransactions, 10);
+            const att = parseInt(record.attachmentTransactions, 10);
+            // Filas sin datos numericos validos no aportan nada.
+            if (!region || !cycleYear || !week || !record.store) return null;
+            if (!Number.isFinite(sale) || sale < 0) return null;
+            if (!Number.isFinite(att) || att < 0) return null;
+            // Descarta departamentos no-tienda (ES Commerce / Ecomdistribution / RMA, etc.)
+            // tambien aqui — Looker los expone como StoreName igual que en BB.
+            if (isNonStoreDept(record.store)) return null;
+            return {
+                region,
+                cycleYear,
+                week,
+                store: record.store.trim(),
+                saleTransactions: sale,
+                attachmentTransactions: att
+            };
+        }
+
         // Captacion (Store Memberships): each row = 1 captured member at
         // (store, date). Member Id, Operating Company y Staff se descartan
         // siempre (anonimizacion + GDPR).
@@ -237,14 +312,9 @@ const CSVParser = (() => {
         }
 
         // Discard non-store departments (RMA centres, ecom warehouses).
-        // ES uses "ES Ecomdistribution"/"ES Ecommerce"; IC uses the same pattern
-        // with "IC " prefix, so we match by substring.
-        if (record.store) {
-            const s = record.store.trim().toLowerCase();
-            if (s.includes('rma') || s.includes('ecomdistribution') || s.includes('ecommerce')) {
-                return null;
-            }
-        }
+        // Helper compartido con la rama de attachment para que cualquier
+        // departamento nuevo se filtre una sola vez.
+        if (isNonStoreDept(record.store)) return null;
 
         // Normalize date: "3 Apr 2026, 21:54:58" -> "2026-04-03"
         if (record.date) {
@@ -332,6 +402,7 @@ const CSVParser = (() => {
         setMapping,
         getMapping,
         detectMapping,
+        isNonStoreDept,
         // Funciones internas expuestas solo para tests. No usar desde la app.
         _internals: { mapRecord, normalizeDate }
     };

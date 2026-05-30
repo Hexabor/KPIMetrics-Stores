@@ -2,6 +2,33 @@ import { describe, it, expect } from 'vitest';
 import CSVParser from '../js/modules/csv-parser.js';
 
 const { mapRecord, normalizeDate } = CSVParser._internals;
+const { isNonStoreDept } = CSVParser;
+
+describe('isNonStoreDept - filtro defensivo de departamentos no-tienda', () => {
+    it('descarta variantes de Ecommerce (con y sin "e" extra)', () => {
+        expect(isNonStoreDept('ES Ecommerce')).toBe(true);
+        expect(isNonStoreDept('ES Commerce')).toBe(true);
+        expect(isNonStoreDept('IC Ecommerce')).toBe(true);
+    });
+
+    it('descarta RMA y Ecomdistribution', () => {
+        expect(isNonStoreDept('ES RMA Centre')).toBe(true);
+        expect(isNonStoreDept('IC RMA')).toBe(true);
+        expect(isNonStoreDept('ES Ecomdistribution')).toBe(true);
+    });
+
+    it('NO descarta tiendas reales', () => {
+        expect(isNonStoreDept('Madrid Islazul')).toBe(false);
+        expect(isNonStoreDept('Las Palmas Mesa y Lopez')).toBe(false);
+        expect(isNonStoreDept('York')).toBe(false);
+    });
+
+    it('null / vacio devuelve false (no se descarta lo que no es nombre)', () => {
+        expect(isNonStoreDept(null)).toBe(false);
+        expect(isNonStoreDept('')).toBe(false);
+        expect(isNonStoreDept(undefined)).toBe(false);
+    });
+});
 
 describe('normalizeDate', () => {
     it('formato Looker CeX tipico: "3 Apr 2026, 21:54:58"', () => {
@@ -234,6 +261,159 @@ describe('mapRecord - source captacion (sin staff por GDPR)', () => {
         expect(r).not.toBeNull();
         expect(r.staff).toBeUndefined();
         expect('staff' in r).toBe(false);
+    });
+});
+
+describe('mapRecord - source attachment (sin staff por GDPR)', () => {
+    // Mapping de attachment: lo que el detector produciria a partir de los
+    // headers reales del CSV de Looker ("Region", "Year", "Week", ...).
+    const attachmentMapping = {
+        'Region': 'region',
+        'Year': 'cycleYear',
+        'Week': 'week',
+        'StoreName': 'store',
+        'Transactions': 'saleTransactions',
+        'Attachment': 'attachmentTransactions'
+    };
+
+    it('fila ES tipica devuelve region/cycleYear/week/store + contadores', () => {
+        const raw = {
+            'Region': 'SPAIN',
+            'Year': '2026',
+            'Week': '22',
+            'StoreName': 'Madrid Islazul',
+            'StaffID': 'ESVLN14167',
+            'StaffName': 'ALEJANDRO BERMEJO',
+            'Transactions': '32',
+            'Attachment': '30'
+        };
+        const r = mapRecord(raw, attachmentMapping, 'attachment');
+        expect(r).not.toBeNull();
+        expect(r.region).toBe('SPAIN');
+        expect(r.cycleYear).toBe(2026);
+        expect(r.week).toBe(22);
+        expect(r.store).toBe('Madrid Islazul');
+        expect(r.saleTransactions).toBe(32);
+        expect(r.attachmentTransactions).toBe(30);
+    });
+
+    it('region normalizada a mayusculas y trimeada', () => {
+        const raw = {
+            'Region': '  canary island  ',
+            'Year': '2026', 'Week': '22', 'StoreName': 'Las Palmas',
+            'Transactions': '10', 'Attachment': '7'
+        };
+        const r = mapRecord(raw, attachmentMapping, 'attachment');
+        expect(r.region).toBe('CANARY ISLAND');
+    });
+
+    it('Percentage NUNCA entra al record (% se recalcula en query)', () => {
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'Madrid Islazul',
+            'Percentage': '0.9375',
+            'Transactions': '32', 'Attachment': '30'
+        };
+        const r = mapRecord(raw, attachmentMapping, 'attachment');
+        expect(r.percentage).toBeUndefined();
+        expect('percentage' in r).toBe(false);
+    });
+
+    it('regresion GDPR: staff/staffId/staffName nunca entran al record', () => {
+        const rawConStaff = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'Madrid Islazul',
+            'StaffID': 'ESVLN14167', 'StaffName': 'ALEJANDRO BERMEJO',
+            'Transactions': '32', 'Attachment': '30'
+        };
+        const r = mapRecord(rawConStaff, attachmentMapping, 'attachment');
+        expect(r).not.toBeNull();
+        expect(r.staff).toBeUndefined();
+        expect(r.staffId).toBeUndefined();
+        expect(r.staffName).toBeUndefined();
+        expect('staff' in r).toBe(false);
+        expect('staffId' in r).toBe(false);
+        expect('staffName' in r).toBe(false);
+    });
+
+    it('regresion GDPR: mapping malicioso con StaffName tampoco lo deja pasar', () => {
+        const mappingMalicioso = { ...attachmentMapping, 'StaffName': 'staffName' };
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'Madrid Islazul',
+            'StaffName': 'ALEJANDRO BERMEJO',
+            'Transactions': '32', 'Attachment': '30'
+        };
+        const r = mapRecord(raw, mappingMalicioso, 'attachment');
+        expect(r.staffName).toBeUndefined();
+        expect('staffName' in r).toBe(false);
+    });
+
+    it('fila sin region devuelve null', () => {
+        const raw = {
+            'Year': '2026', 'Week': '22', 'StoreName': 'Madrid',
+            'Transactions': '10', 'Attachment': '5'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('fila sin store devuelve null', () => {
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'Transactions': '10', 'Attachment': '5'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('Transactions/Attachment no numericos devuelven null', () => {
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'Madrid',
+            'Transactions': 'N/A', 'Attachment': '5'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('StoreName="ES Commerce" se descarta (departamento ecom, no tienda)', () => {
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'ES Commerce',
+            'Transactions': '50', 'Attachment': '40'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('StoreName="ES Ecommerce" se descarta (variante con doble e)', () => {
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'ES Ecommerce',
+            'Transactions': '50', 'Attachment': '40'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('StoreName con "RMA" se descarta (centro RMA)', () => {
+        const raw = {
+            'Region': 'CANARY ISLAND', 'Year': '2026', 'Week': '22',
+            'StoreName': 'IC RMA Centre',
+            'Transactions': '10', 'Attachment': '5'
+        };
+        expect(mapRecord(raw, attachmentMapping, 'attachment')).toBeNull();
+    });
+
+    it('attachment > transactions: el parser NO bloquea (validacion en BD), pero conserva los numeros', () => {
+        // El chk_attach_qty del schema MySQL valida esto, no el parser.
+        // El parser pasa los numeros tal cual; la responsabilidad de filtrar
+        // datos imposibles es del confirm flow / la BD.
+        const raw = {
+            'Region': 'SPAIN', 'Year': '2026', 'Week': '22',
+            'StoreName': 'Madrid',
+            'Transactions': '10', 'Attachment': '20'
+        };
+        const r = mapRecord(raw, attachmentMapping, 'attachment');
+        expect(r).not.toBeNull();
+        expect(r.saleTransactions).toBe(10);
+        expect(r.attachmentTransactions).toBe(20);
     });
 });
 

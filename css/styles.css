@@ -2469,34 +2469,6 @@ tr:hover { background: #f8fafc; }
     border-radius: var(--radius-sm);
 }
 
-.store-groups-manage-toggle {
-    width: 100%;
-    text-align: left;
-    padding: 0.2rem 0.35rem;
-    font-size: 0.7rem;
-    color: var(--color-text-light);
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    border-radius: 3px;
-}
-
-.store-groups-manage-toggle:hover {
-    background: var(--color-bg);
-    color: var(--color-primary);
-}
-
-.store-groups-list {
-    margin-top: 0.3rem;
-    padding-top: 0.3rem;
-    border-top: 1px dashed var(--color-border-light);
-    display: flex;
-    flex-direction: column;
-    gap: 0.25rem;
-    max-height: 180px;
-    overflow-y: auto;
-}
-
 .store-groups-empty {
     font-size: 0.7rem;
     color: var(--color-text-lighter);
@@ -2597,6 +2569,401 @@ tr:hover { background: #f8fafc; }
     padding-top: 0.4rem;
     display: flex;
     justify-content: flex-end;
+}
+
+/* ===== SETTINGS: TABS ===== */
+.settings-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.1rem;
+    border-bottom: 1px solid var(--color-border);
+    margin-bottom: 1rem;
+}
+
+.settings-tab-btn {
+    padding: 0.55rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text-lighter);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    cursor: pointer;
+    border-radius: 4px 4px 0 0;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.settings-tab-btn:hover {
+    color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+
+.settings-tab-btn.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    background: var(--color-surface);
+}
+
+.settings-tab-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+}
+
+.settings-panel {
+    /* Hereda visibilidad de .hidden (display:none) cuando no esta activo. */
+    animation: settings-panel-fade 0.15s ease-out;
+}
+
+@keyframes settings-panel-fade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* ===== SETTINGS: CATEGORY FAMILIES + STORE GROUPS EDITOR (shared) ===== */
+.settings-families {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.families-section { display: flex; flex-direction: column; gap: 0.4rem; }
+
+.families-subhead {
+    font-size: 0.8rem;
+    margin: 0 0 0.2rem;
+    color: var(--color-text);
+    font-weight: 600;
+}
+
+.families-subhead-hint {
+    font-weight: 400;
+    color: var(--color-text-lighter);
+    font-size: 0.7rem;
+}
+
+.families-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    padding: 0.5rem;
+    border: 1px solid var(--color-border-light);
+    border-radius: 3px;
+    background: var(--color-surface);
+}
+
+.family-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.3rem 0.2rem 0.1rem;
+    font-size: 0.72rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: 4px;
+    transition: background 0.1s, border-color 0.1s;
+}
+
+.family-chip.family-hidden {
+    opacity: 0.45;
+}
+
+.family-chip.family-chip-active {
+    background: var(--color-primary-light);
+    border-color: var(--color-primary);
+}
+
+.family-chip-unmapped {
+    border-style: dashed;
+    background: transparent;
+}
+
+.family-chip-unmapped.family-chip-active {
+    background: var(--color-primary-light);
+    border-style: solid;
+}
+
+.family-chip-select {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.4rem;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 0.72rem;
+    color: var(--color-text);
+    border-radius: 3px;
+}
+
+.family-chip-select:hover { color: var(--color-primary); }
+
+.family-chip-count {
+    font-size: 0.65rem;
+    background: var(--color-border-light);
+    color: var(--color-text-lighter);
+    padding: 0.05rem 0.4rem;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.family-chip-active .family-chip-count {
+    background: var(--color-primary);
+    color: var(--color-surface);
+}
+
+.family-name { font-weight: 600; }
+
+.family-badge {
+    font-size: 0.6rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.family-badge-factory { background: var(--color-border-light); color: var(--color-text-lighter); }
+.family-badge-custom { background: var(--color-primary-light); color: var(--color-primary); }
+.family-badge-modified {
+    background: #fde68a;
+    color: #92400e;
+}
+
+.family-btn {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.65rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-surface);
+    color: var(--color-text);
+    cursor: pointer;
+}
+
+.family-btn:hover { border-color: var(--color-primary); color: var(--color-primary); }
+.family-btn-danger:hover { border-color: var(--color-danger); color: var(--color-danger); }
+
+.families-add {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.families-add input {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+}
+
+.families-controls {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.families-controls .input-search {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.72rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+}
+
+.families-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.7rem;
+    color: var(--color-text-lighter);
+    white-space: nowrap;
+}
+
+.family-editor-section { margin-top: 0.5rem; }
+
+.family-editor-head {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    margin-bottom: 0.4rem;
+}
+
+.family-editor-meta {
+    font-size: 0.7rem;
+    color: var(--color-text-lighter);
+}
+
+.family-cat-chips {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 0.4rem;
+    max-height: 420px;
+    overflow-y: auto;
+    border: 1px solid var(--color-border-light);
+    border-radius: 3px;
+    padding: 0.5rem;
+    background: var(--color-surface);
+}
+
+.cat-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.25rem 0.4rem;
+    font-size: 0.72rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: 4px;
+    transition: border-color 0.1s, background 0.1s;
+    min-width: 0;        /* permite que el flex item se encoja por debajo del ancho del contenido */
+}
+
+.cat-chip:hover { border-color: var(--color-primary); }
+
+.cat-chip-name {
+    flex: 1;
+    min-width: 0;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cat-chip-move {
+    flex-shrink: 0;
+    width: 110px;
+    padding: 0.1rem 0.25rem;
+    font-size: 0.66rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-surface);
+    color: var(--color-text-lighter);
+    cursor: pointer;
+}
+
+.cat-chip-move:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+.cat-chip-btn {
+    padding: 0.05rem 0.35rem;
+    font-size: 0.75rem;
+    line-height: 1;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-surface);
+    color: var(--color-text-lighter);
+    cursor: pointer;
+}
+
+.cat-chip-btn:hover { color: var(--color-primary); border-color: var(--color-primary); }
+
+.family-add-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.family-add-row label {
+    font-size: 0.72rem;
+    color: var(--color-text-lighter);
+    white-space: nowrap;
+}
+
+.family-add-select {
+    flex: 1;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: 3px;
+    background: var(--color-bg);
+}
+
+/* ===== STORE PICKER (parrilla de catalogo para grupos de tiendas) ===== */
+.store-picker { margin-top: 0.8rem; }
+.store-picker-head { margin-bottom: 0.4rem; }
+
+.store-picker-grid {
+    /* Multi-columna nativa: items fluyen TOP-TO-BOTTOM dentro de cada
+       columna antes de pasar a la siguiente. Como las items se generan
+       ya ordenadas alfabeticamente, la lectura natural es columna a
+       columna ("Madrid Centro" arriba, "Madrid Sur" debajo). */
+    column-width: 220px;
+    column-gap: 0.5rem;
+    border: 1px solid var(--color-border-light);
+    border-radius: 3px;
+    padding: 0.5rem;
+    background: var(--color-surface);
+}
+
+.store-picker-chip {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.72rem;
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--color-text);
+    text-align: left;
+    min-width: 0;
+    width: 100%;
+    margin-bottom: 0.4rem;
+    /* Evita que el navegador parta un chip entre columnas. */
+    break-inside: avoid;
+    transition: background 0.1s, border-color 0.1s, color 0.1s;
+}
+
+.store-picker-chip:hover {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+
+.store-picker-chip.store-picker-chip-on {
+    background: var(--color-primary);
+    color: var(--color-surface);
+    border-color: var(--color-primary);
+}
+
+.store-picker-chip.store-picker-chip-on:hover {
+    background: var(--color-primary);
+    filter: brightness(0.92);
+}
+
+.store-picker-icon {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 0.65rem;
+    font-weight: 700;
+    background: var(--color-primary);
+    color: var(--color-surface);
+    line-height: 1;
+}
+
+.store-picker-chip.store-picker-chip-on .store-picker-icon {
+    background: var(--color-surface);
+    color: var(--color-primary);
+}
+
+.store-picker-icon.store-picker-icon-empty {
+    background: transparent;
+    color: var(--color-text-lighter);
+    border: 1px dashed var(--color-border);
+}
+
+.store-picker-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-weight: 600;
 }
 
 /* ===== UTILITY ===== */

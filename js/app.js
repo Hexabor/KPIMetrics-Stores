@@ -10,7 +10,8 @@ const App = (() => {
         'baby-banking-ic': 'Baby Banking IC',
         'ecom': 'Ecom Sales',
         'captacion': 'Captacion de socios',
-        'attachment': 'Attachment',
+        'attachment': 'Attachment ES',
+        'attachment-ic': 'Attachment IC',
         'stocks': 'Stocks (AIO)'
     };
 
@@ -281,12 +282,46 @@ const App = (() => {
         const emptyMsg = document.getElementById('coverage-empty');
         const ranges = await Database.getDateRangeBySource();
 
+        // Attachment vive en su propia tabla y solo tiene (cycleYear, week).
+        // Convertimos su rango de semanas a fechas sabado-viernes usando el
+        // calendario CeX para que la barra encaje con las demas fuentes.
+        try {
+            const attachRows = await Database.getAllAttachmentWeekly();
+            if (attachRows.length) {
+                const courseStart = KPIEngine.getCourseStart();
+                const cs = courseStart.split('-');
+                const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
+                const weekToDateRange = (w) => {
+                    const fromMs = startMs + (w - 1) * 7 * 86400000;
+                    const toMs = fromMs + 6 * 86400000;
+                    return {
+                        from: new Date(fromMs).toISOString().substring(0, 10),
+                        to: new Date(toMs).toISOString().substring(0, 10)
+                    };
+                };
+                const bySrc = {};
+                for (const a of attachRows) {
+                    if (!bySrc[a.source]) bySrc[a.source] = { wkMin: a.week, wkMax: a.week };
+                    if (a.week < bySrc[a.source].wkMin) bySrc[a.source].wkMin = a.week;
+                    if (a.week > bySrc[a.source].wkMax) bySrc[a.source].wkMax = a.week;
+                }
+                for (const [src, r] of Object.entries(bySrc)) {
+                    const fromR = weekToDateRange(r.wkMin);
+                    const toR = weekToDateRange(r.wkMax);
+                    ranges[src] = { from: fromR.from, to: toR.to };
+                }
+            }
+        } catch (e) {
+            console.warn('Coverage attachment range failed:', e);
+        }
+
         const sources = {
             'baby-banking': { label: 'Baby Banking ES', cssClass: 'coverage-bar-bb' },
             'baby-banking-ic': { label: 'Baby Banking IC', cssClass: 'coverage-bar-bb-ic' },
             'ecom': { label: 'Ecom Sales', cssClass: 'coverage-bar-ecom' },
             'captacion': { label: 'Captacion de socios', cssClass: 'coverage-bar-captacion' },
-            'attachment': { label: 'Attachment', cssClass: 'coverage-bar-attachment' },
+            'attachment': { label: 'Attachment ES', cssClass: 'coverage-bar-attachment' },
+            'attachment-ic': { label: 'Attachment IC', cssClass: 'coverage-bar-attachment' },
             'stocks': { label: 'Stocks (AIO)', cssClass: 'coverage-bar-stocks' }
         };
 
@@ -431,7 +466,8 @@ const App = (() => {
     // DASHBOARD: STORE (evolucion por KPI)
     // ============================
     async function refreshDashStore() {
-        const stores = await Database.getDistinctValues('store');
+        const stores = (await Database.getDistinctValues('store'))
+            .filter(s => !CSVParser.isNonStoreDept(s));
         populateStoreSelect('kpi-panel-store', stores);
 
         const fromEl = document.getElementById('evo-week-from');
@@ -448,16 +484,26 @@ const App = (() => {
         refreshEvolution();
     }
 
-    function formatPct(val) {
-        const cls = val > 40 ? 'pct-good' : val >= 30 ? 'pct-ok' : 'pct-low';
-        return `<span class="pct-cell ${cls}">${val}%</span>`;
+    // Umbrales por defecto (good/ok inclusivos: pct>=goodMin → verde,
+    // pct>=okMin → amarillo, resto → rojo). Heredan la semantica historica
+    // del proyecto. Por KPI se pueden sobreescribir (attachment usa 85/80).
+    const DEFAULT_PCT_THRESHOLDS = { good: 41, ok: 30 };
+
+    function pctClass(pct, thresholds) {
+        const t = thresholds || DEFAULT_PCT_THRESHOLDS;
+        if (pct >= t.good) return 'pct-good';
+        if (pct >= t.ok) return 'pct-ok';
+        return 'pct-low';
     }
 
-    function formatPctDetail(numerator, denominator) {
+    function formatPct(val, thresholds) {
+        return `<span class="pct-cell ${pctClass(val, thresholds)}">${val}%</span>`;
+    }
+
+    function formatPctDetail(numerator, denominator, thresholds) {
         if (denominator <= 0) return '--';
         const pct = Math.round((numerator / denominator) * 100);
-        const cls = pct > 40 ? 'pct-good' : pct >= 30 ? 'pct-ok' : 'pct-low';
-        return `<span class="pct-cell ${cls}">${pct}%</span> <small class="pct-units">${numerator}/${denominator}</small>`;
+        return `<span class="pct-cell ${pctClass(pct, thresholds)}">${pct}%</span> <small class="pct-units">${numerator}/${denominator}</small>`;
     }
 
     // ============================
@@ -485,7 +531,12 @@ const App = (() => {
             // Operation refs: distinct Order Numbers per counter type.
             // counterRefs = union of sale + cash buy + exchange + refund + test-admission.
             refundOrderRefs: {}, cashBuyOrderRefs: {}, exchangeOrderRefs: {},
-            counterRefs: {}
+            counterRefs: {},
+            // Attachment: contadores semanales por (store, week) inyectados desde
+            // attachment_weekly. Estan ya filtrados a venta en tienda en el CSV
+            // origen (Looker), asi que NO hay variante NoEcom: aplicar el filtro
+            // de ecom-per-KPI no tiene sentido aqui.
+            attachSaleTxs: 0, attachWithMember: 0
         };
     }
 
@@ -586,6 +637,8 @@ const App = (() => {
         if (src.counterRefs) {
             for (const ref of Object.keys(src.counterRefs)) dst.counterRefs[ref] = true;
         }
+        dst.attachSaleTxs += src.attachSaleTxs || 0;
+        dst.attachWithMember += src.attachWithMember || 0;
     }
 
     // Field picker: returns NoEcom version when the metric filters ecom.
@@ -617,6 +670,7 @@ const App = (() => {
         basics: true, pctBasics: true, pctCombo: true,
         buys: false, cashBuys: false, exchanges: false, pctVale: false,  // inert (no ecom variant)
         memberships: false,  // inert (captacion is in-store by definition)
+        attachTxs: false, attachWithMember: false, attachPct: false,  // inert (attachment ya es venta en tienda)
         testOrders: false, testItems: false, testRatio: false,  // inert (test admissions are in-store)
         operTotal: false, operRefunds: false, operCashBuys: false, operExchanges: false  // inert (counts of refs)
     };
@@ -628,35 +682,83 @@ const App = (() => {
     ];
     function metricFiltersEcom(key) { return !!ECOM_CONFIG[key]; }
 
-    // Category -> Supercategory mapping (loaded from data/ at init)
-    const CATEGORY_SUPERCATEGORY = {};   // { category: supercategory }
-    let SUPERCATEGORY_LIST = [];          // declared order from the JSON + "Sin mapear" if needed
+    // Category -> Supercategory ("familia"). Capas:
+    //   - Factory: data/categories-supercategories.json (set canonico inmutable).
+    //   - User: setting `categoryFamilies` en Dexie. Estructura:
+    //       {
+    //         families: null | string[],          // null => usa factory tal cual
+    //         removedFamilies: string[],          // familias factory ocultadas (no se borra el JSON)
+    //         categoryOverrides: { cat: family }  // null/'' => 'Sin mapear'
+    //       }
+    //   - Runtime: SUPERCATEGORY_LIST y CATEGORY_SUPERCATEGORY se fusionan a partir
+    //     de las dos capas. Cualquier categoria sin asignar cae en 'Sin mapear'.
+    const CATEGORY_SUPERCATEGORY = {};        // { category: supercategory } (fusionado)
+    let SUPERCATEGORY_LIST = [];               // lista visible (factory + custom - removedFamilies)
     const UNMAPPED_SUPER = 'Sin mapear';
-    let supercategoryLoadPromise = null;  // memoized loader; consumers await it
+    let factoryFamiliesMapping = null;         // raw JSON factory
+    let factoryFamiliesList = null;
+    let supercategoryLoadPromise = null;       // memoized loader
+
     function loadSupercategoryMapping() {
         if (supercategoryLoadPromise) return supercategoryLoadPromise;
         supercategoryLoadPromise = (async () => {
-            const res = await fetch('data/categories-supercategories.json', { cache: 'no-cache' });
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            if (data && data.mapping && typeof data.mapping === 'object') {
-                for (const [cat, sup] of Object.entries(data.mapping)) {
+            if (!factoryFamiliesMapping) {
+                const res = await fetch('data/categories-supercategories.json', { cache: 'no-cache' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                factoryFamiliesMapping = (data && data.mapping && typeof data.mapping === 'object') ? data.mapping : {};
+                factoryFamiliesList = Array.isArray(data.supercategories)
+                    ? data.supercategories.slice()
+                    : [...new Set(Object.values(factoryFamiliesMapping))];
+            }
+            const overrides = (await Database.getSetting('categoryFamilies')) || {};
+            const removed = new Set(Array.isArray(overrides.removedFamilies) ? overrides.removedFamilies : []);
+            const userMap = (overrides.categoryOverrides && typeof overrides.categoryOverrides === 'object') ? overrides.categoryOverrides : {};
+
+            // Lista visible: si el usuario definio una lista, esa gana (ya excluye
+            // los factory removidos por elision). Si no, usamos la de fabrica menos
+            // las que el usuario ha ocultado.
+            if (Array.isArray(overrides.families)) {
+                SUPERCATEGORY_LIST = overrides.families.slice();
+            } else {
+                SUPERCATEGORY_LIST = factoryFamiliesList.filter(f => !removed.has(f));
+            }
+
+            // Mapping fusionado: factory base, overrides ganan. Si el override
+            // apunta a una familia que ya no existe (borrada), cae a Sin mapear
+            // (el getter ya hace ese filtro al consultar).
+            for (const k of Object.keys(CATEGORY_SUPERCATEGORY)) delete CATEGORY_SUPERCATEGORY[k];
+            for (const [cat, sup] of Object.entries(factoryFamiliesMapping)) {
+                CATEGORY_SUPERCATEGORY[cat] = sup;
+            }
+            for (const [cat, sup] of Object.entries(userMap)) {
+                if (sup === null || sup === '') {
+                    // Override explicito a Sin mapear: borramos cualquier mapping
+                    // previo para que el getter devuelva UNMAPPED_SUPER.
+                    delete CATEGORY_SUPERCATEGORY[cat];
+                } else {
                     CATEGORY_SUPERCATEGORY[cat] = sup;
                 }
-            }
-            if (Array.isArray(data.supercategories)) {
-                SUPERCATEGORY_LIST = data.supercategories.slice();
-            } else {
-                SUPERCATEGORY_LIST = [...new Set(Object.values(CATEGORY_SUPERCATEGORY))];
             }
         })();
         // Clear promise on failure so a later caller can retry.
         supercategoryLoadPromise.catch(() => { supercategoryLoadPromise = null; });
         return supercategoryLoadPromise;
     }
+
+    // Fuerza recarga del mapping fusionado (tras editar overrides).
+    function invalidateSupercategoryCache() {
+        supercategoryLoadPromise = null;
+    }
+
     function getSupercategory(category) {
         if (!category) return UNMAPPED_SUPER;
-        return CATEGORY_SUPERCATEGORY[category] || UNMAPPED_SUPER;
+        const fam = CATEGORY_SUPERCATEGORY[category];
+        if (!fam) return UNMAPPED_SUPER;
+        // Si la familia que tiene asignada ya no esta en la lista visible
+        // (borrada por el usuario), tratamos como Sin mapear.
+        if (!SUPERCATEGORY_LIST.includes(fam)) return UNMAPPED_SUPER;
+        return fam;
     }
 
     // ============================
@@ -852,6 +954,20 @@ const App = (() => {
         memberships:   { label: 'Socios',
             value: b => b.memberships || 0,
             format: v => (v || 0).toLocaleString('es-ES') },
+        // Attachment (a nivel tienda) - inyectado desde attachment_weekly.
+        // Datos del CSV de Looker ya filtrados a venta en tienda, asi que el
+        // filtro ecom-per-KPI no aplica aqui (sin variante NoEcom).
+        attachTxs:     { label: 'Transacciones (attachment)',
+            value: b => b.attachSaleTxs || 0,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        attachWithMember: { label: 'Ventas con socio',
+            value: b => b.attachWithMember || 0,
+            format: v => (v || 0).toLocaleString('es-ES') },
+        // Umbrales de attachment: >=85 verde, 80-84 amarillo, <80 rojo
+        attachPct:     { label: '% Attachment',          isPct: true,
+            minOpsOf: b => b.attachSaleTxs || 0,
+            value: b => { const t = b.attachSaleTxs || 0; return t > 0 ? ((b.attachWithMember || 0) / t) * 100 : 0; },
+            format: (v, b) => formatPctDetail(b.attachWithMember || 0, b.attachSaleTxs || 0, { good: 85, ok: 80 }) },
         // Admision a test (a nivel tienda)
         testOrders:    { label: 'Ordenes de test',
             value: b => Object.keys(b.testOrderRefs || {}).length,
@@ -920,7 +1036,7 @@ const App = (() => {
     };
 
     // Default KPIs to show in compare mode (registry order within these)
-    const DEFAULT_COMPARE_KPIS = ['netSales', 'tickets', 'pctMulti', 'mobiles', 'pctServices', 'pctVale'];
+    const DEFAULT_COMPARE_KPIS = ['netSales', 'tickets', 'pctMulti', 'mobiles', 'pctServices', 'pctVale', 'attachPct'];
 
     function initEvoKpiMultiSelect() {
         const trigger = document.getElementById('evo-kpi-trigger');
@@ -1086,7 +1202,7 @@ const App = (() => {
     };
 
     // Default columns for Vista general (current defaults as approved)
-    const DG_DEFAULT_COLUMNS = ['netSales', 'buys', 'pctVale', 'pctMulti', 'pctServices', 'pctBasics'];
+    const DG_DEFAULT_COLUMNS = ['netSales', 'buys', 'pctVale', 'pctMulti', 'pctServices', 'pctBasics', 'attachPct'];
 
     // Short labels used in the Vista general header (overrides METRICS.label for compactness)
     const DG_COLUMN_LABELS = {
@@ -1110,6 +1226,9 @@ const App = (() => {
         exchanges:     { label: 'Exchanges',      title: 'Compras en vale' },
         pctVale:       { label: '% Vale',         title: '% de compras hechas con vale de tienda (exchange)' },
         memberships:   { label: 'Socios',         title: 'Socios captados en el rango de semanas' },
+        attachTxs:     { label: 'T. attach',      title: 'Transacciones de venta en tienda (fuente: Attachment del Looker, agregado semanal). Se compara con tickets de Baby Banking al importar' },
+        attachWithMember: { label: 'Vtas socio',  title: 'Ventas en tienda hechas con socio (fuente: Attachment del Looker, agregado semanal)' },
+        attachPct:     { label: '% Attach',       title: '% de ventas en tienda hechas con socio. Recalculado a nivel tienda a partir de attachment_transactions / sale_transactions (no se usa el % precalculado del CSV)' },
         testOrders:    { label: 'Ord. test',      title: 'Numero de ordenes de admision a test (Order Numbers unicos con type=test-admission)' },
         testItems:     { label: 'Items test',     title: 'Suma de Quantity en las filas Transfer/Test (items admitidos a test)' },
         testRatio:     { label: '% Ord. test',    title: 'Ordenes de test / Operaciones totales (Order Numbers unicos con type sale | cash buy | exchange | refund | test-admission)' },
@@ -1214,6 +1333,16 @@ const App = (() => {
                 if (!evoState.compareWeekData[wk]) evoState.compareWeekData[wk] = emptyBucket();
                 addToBucket(evoState.compareWeekData[wk], r);
             }
+            // Asegura los buckets de las semanas con attachment aunque no
+            // haya operations en ellas, y los inyecta.
+            const attachRows = await Database.getAllAttachmentWeekly();
+            for (const a of attachRows) {
+                if (a.week < weekFrom || a.week > weekTo) continue;
+                if (a.store !== compareSubject) continue;
+                if (!evoState.compareWeekData[a.week]) evoState.compareWeekData[a.week] = emptyBucket();
+                evoState.compareWeekData[a.week].attachSaleTxs += a.saleTransactions;
+                evoState.compareWeekData[a.week].attachWithMember += a.attachmentTransactions;
+            }
             renderCompareKPIs();
             return;
         }
@@ -1226,6 +1355,23 @@ const App = (() => {
             if (!evoState.rowWeekData[key]) evoState.rowWeekData[key] = {};
             if (!evoState.rowWeekData[key][wk]) evoState.rowWeekData[key][wk] = emptyBucket();
             addToBucket(evoState.rowWeekData[key][wk], r);
+        }
+        // Inyecta attachment_weekly creando buckets si la combinacion
+        // (store, week) no aparece en operations.
+        const attachRows = await Database.getAllAttachmentWeekly();
+        for (const a of attachRows) {
+            if (a.week < weekFrom || a.week > weekTo) continue;
+            if (store && store !== 'all' && a.store !== store) continue;
+            if (!evoState.rowWeekData[a.store]) evoState.rowWeekData[a.store] = {};
+            if (!evoState.rowWeekData[a.store][a.week]) evoState.rowWeekData[a.store][a.week] = emptyBucket();
+            evoState.rowWeekData[a.store][a.week].attachSaleTxs += a.saleTransactions;
+            evoState.rowWeekData[a.store][a.week].attachWithMember += a.attachmentTransactions;
+        }
+
+        // Filtro defensivo de departamentos no-tienda (ES Ecommerce, RMA, etc.)
+        // por si una fila se cuela en operations o attachment_weekly.
+        for (const key of Object.keys(evoState.rowWeekData)) {
+            if (CSVParser.isNonStoreDept(key)) delete evoState.rowWeekData[key];
         }
 
         renderEvolution();
@@ -1728,6 +1874,13 @@ const App = (() => {
                 return;
             }
 
+            // Attachment: agregado semanal por (store, cycleYear, week, source).
+            // El CSV trae ES + IC juntos; el confirm los splittea por Region.
+            if (currentImportSource === 'attachment') {
+                await confirmAttachmentImport(result.records, file.name);
+                return;
+            }
+
             // Baby Banking (and other sources): normal import flow
             // Deduplicate: skip records that already exist from the SAME source
             UI.showProgress(0, 1, 'Comprobando duplicados...');
@@ -1896,6 +2049,179 @@ const App = (() => {
 
         UI.hideProgress();
         UI.addLog(`Captacion OK: ${totalMembers.toLocaleString()} socios captados (${added.toLocaleString()} filas (tienda, dia) en BD)`, 'success');
+
+        currentPreviewData = null;
+        resetDashboardFilters();
+        await renderImportHistory();
+        await refreshHome();
+    }
+
+    // ============================
+    // ATTACHMENT IMPORT
+    // ============================
+    // Granularidad almacenada: (store, cycleYear, week, source) — el CSV
+    // viene por staff/semana y aqui se descarta staff (GDPR) sumando los
+    // contadores de cada staff de la misma (tienda, semana). La columna
+    // Region determina el source destino ('attachment' para SPAIN,
+    // 'attachment-ic' para CANARY ISLAND). bulkPutAttachmentWeekly hace
+    // upsert por PK natural, asi que re-importar la misma semana
+    // sobreescribe sin duplicar.
+    //
+    // Como warning no-bloqueante: por cada (tienda, semana) comparamos
+    // Transactions del CSV con COUNT DISTINCT Order Number de operations
+    // (type='sale', channel='tienda', source baby-banking[-ic]). Si difieren,
+    // se loggea — util para validar la convencion de semanas del CSV de
+    // Looker contra la del proyecto (sab-vie).
+    async function confirmAttachmentImport(records, filename) {
+        if (!records.length) {
+            UI.hideProgress();
+            UI.addLog('No se encontraron filas validas en el CSV de attachment.', 'error');
+            currentPreviewData = null;
+            return;
+        }
+
+        // Reconciliacion de nombres de tienda (reutiliza el mismo reconciler
+        // de captacion: misma cascada exact/tildes/compacto + alias manuales
+        // en data/captacion-store-aliases.json).
+        const knownStores = await Database.getDistinctValues('store');
+        const aliases = await loadCaptacionAliases();
+        const reconcile = makeCaptacionReconciler(knownStores, aliases);
+
+        let resolved = 0;
+        const unmatchedSet = new Set();
+        for (const r of records) {
+            if (!r.store) continue;
+            const canonical = reconcile(r.store);
+            if (!canonical) {
+                unmatchedSet.add(r.store);
+                continue;
+            }
+            if (canonical !== r.store) {
+                r.store = canonical;
+                resolved++;
+            }
+        }
+        if (resolved > 0) {
+            UI.addLog(`Tiendas normalizadas al canon de Baby Banking: ${resolved.toLocaleString()} filas entrantes`, 'success');
+        }
+        if (unmatchedSet.size > 0) {
+            const sample = [...unmatchedSet].slice(0, 5).join(', ');
+            const more = unmatchedSet.size > 5 ? ` (+${unmatchedSet.size - 5})` : '';
+            UI.addLog(`Aviso attachment: ${unmatchedSet.size} tiendas sin match en Baby Banking: ${sample}${more}. Anade un alias en data/captacion-store-aliases.json.`, 'error');
+        }
+
+        // Agregacion por (store, cycleYear, week, source). Region SPAIN -> 'attachment',
+        // CANARY ISLAND -> 'attachment-ic'. Otras regiones se descartan con aviso.
+        const aggregated = new Map();
+        let droppedRegion = 0;
+        for (const r of records) {
+            let targetSource;
+            if (r.region === 'SPAIN') targetSource = 'attachment';
+            else if (r.region === 'CANARY ISLAND' || r.region === 'CANARY ISLANDS') targetSource = 'attachment-ic';
+            else { droppedRegion++; continue; }
+
+            const key = `${r.store}|${r.cycleYear}|${r.week}|${targetSource}`;
+            if (!aggregated.has(key)) {
+                aggregated.set(key, {
+                    store: r.store,
+                    cycleYear: r.cycleYear,
+                    week: r.week,
+                    source: targetSource,
+                    saleTransactions: 0,
+                    attachmentTransactions: 0
+                });
+            }
+            const acc = aggregated.get(key);
+            acc.saleTransactions += r.saleTransactions;
+            acc.attachmentTransactions += r.attachmentTransactions;
+        }
+        if (droppedRegion > 0) {
+            UI.addLog(`Aviso: ${droppedRegion} filas con Region desconocida descartadas`, 'error');
+        }
+
+        const rows = [...aggregated.values()];
+        if (!rows.length) {
+            UI.hideProgress();
+            UI.addLog('No quedan filas tras agregar. Revisa Region/StoreName del CSV.', 'error');
+            currentPreviewData = null;
+            return;
+        }
+
+        // Cross-check no-bloqueante contra Baby Banking: por cada (store, week)
+        // contamos Order Numbers unicos de tipo 'sale' en tienda y avisamos si
+        // difiere de Transactions del CSV. Solo es informativo.
+        try {
+            const ops = await Database.getAllOperations();
+            const bbTickets = new Map();  // "store|week" -> Set<reference>
+            for (const op of ops) {
+                if (op.type !== 'sale') continue;
+                if ((op.channel || 'tienda') !== 'tienda') continue;
+                if (!op.source || !op.source.startsWith('baby-banking')) continue;
+                if (!op.reference || !op.week || !op.store) continue;
+                const k = `${op.store}|${op.week}`;
+                if (!bbTickets.has(k)) bbTickets.set(k, new Set());
+                bbTickets.get(k).add(op.reference);
+            }
+            let mismatches = 0;
+            let checked = 0;
+            const samples = [];
+            for (const row of rows) {
+                const k = `${row.store}|${row.week}`;
+                if (!bbTickets.has(k)) continue;
+                checked++;
+                const bbCount = bbTickets.get(k).size;
+                if (bbCount !== row.saleTransactions) {
+                    mismatches++;
+                    if (samples.length < 3) {
+                        samples.push(`${row.store} W${row.week}: CSV=${row.saleTransactions} vs BB=${bbCount}`);
+                    }
+                }
+            }
+            if (checked > 0) {
+                if (mismatches === 0) {
+                    UI.addLog(`Cross-check OK: Transactions del CSV cuadran con tickets de Baby Banking en las ${checked.toLocaleString()} (tienda, semana) comparadas`, 'success');
+                } else {
+                    UI.addLog(`Aviso cross-check: ${mismatches.toLocaleString()}/${checked.toLocaleString()} (tienda, semana) no cuadran con Baby Banking. Ejemplos: ${samples.join('; ')}`, 'error');
+                }
+            }
+        } catch (e) {
+            console.warn('Attachment cross-check skipped:', e);
+        }
+
+        UI.showProgress(0, rows.length, 'Guardando attachment...');
+        const added = await Database.bulkPutAttachmentWeekly(rows, (current, total) => {
+            UI.showProgress(current, total);
+        });
+
+        // Renormalizar filas previas tambien (por si los aliases han cambiado).
+        try {
+            await Database.renormalizeAttachmentStoresForSource('attachment', s => reconcile(s) || s);
+            await Database.renormalizeAttachmentStoresForSource('attachment-ic', s => reconcile(s) || s);
+        } catch (e) {
+            console.warn('Attachment renormalize skipped:', e);
+        }
+
+        const cycleYears = [...new Set(rows.map(r => r.cycleYear))];
+        const weeks = rows.map(r => r.week);
+        const weekFrom = Math.min(...weeks);
+        const weekTo = Math.max(...weeks);
+        const storeSet = new Set(rows.map(r => r.store));
+        const sourcesSet = new Set(rows.map(r => r.source));
+
+        for (const src of sourcesSet) {
+            await Database.logImport({
+                source: src,
+                filename,
+                rowCount: rows.filter(r => r.source === src).length,
+                dateFrom: null,
+                dateTo: null,
+                storeCount: new Set(rows.filter(r => r.source === src).map(r => r.store)).size,
+                stores: [...new Set(rows.filter(r => r.source === src).map(r => r.store))]
+            });
+        }
+
+        UI.hideProgress();
+        UI.addLog(`Attachment OK: ${added.toLocaleString()} filas (tienda, semana, fuente) — ciclo ${cycleYears.join('/')}, semanas ${weekFrom}-${weekTo}, ${storeSet.size} tiendas, fuentes [${[...sourcesSet].join(', ')}]`, 'success');
 
         currentPreviewData = null;
         resetDashboardFilters();
@@ -2132,7 +2458,45 @@ const App = (() => {
     // ============================
     // SETTINGS
     // ============================
+    // Tab switching dentro del panel de Configuracion. La pestana activa se
+    // guarda en setting `settingsActiveTab` para que al volver a la seccion
+    // (o recargar) aparezca donde lo dejaste.
+    function bindSettingsTabs() {
+        const tabs = document.querySelectorAll('.settings-tab-btn[data-settings-tab]');
+        tabs.forEach(btn => {
+            if (btn.dataset.bound === '1') return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', () => {
+                showSettingsTab(btn.dataset.settingsTab, true);
+            });
+        });
+    }
+
+    function showSettingsTab(key, persist) {
+        const tabs = document.querySelectorAll('.settings-tab-btn[data-settings-tab]');
+        const panels = document.querySelectorAll('.settings-panel[data-settings-panel]');
+        let matched = false;
+        tabs.forEach(btn => {
+            const active = btn.dataset.settingsTab === key;
+            btn.classList.toggle('active', active);
+            btn.setAttribute('aria-selected', active ? 'true' : 'false');
+            if (active) matched = true;
+        });
+        if (!matched) return;  // key invalida: dejamos lo que esta
+        panels.forEach(p => {
+            p.classList.toggle('hidden', p.dataset.settingsPanel !== key);
+        });
+        if (persist) {
+            Database.setSetting('settingsActiveTab', key).catch(() => {});
+        }
+    }
+
     async function loadSettings() {
+        bindSettingsTabs();
+        // Restaura la pestana activa si el usuario habia elegido una previa.
+        const savedTab = await Database.getSetting('settingsActiveTab');
+        if (savedTab) showSettingsTab(savedTab, false);
+
         const count = await Database.getRecordCount();
         const imports = await Database.getImportHistory();
         UI.updateSettingsInfo(
@@ -2145,12 +2509,632 @@ const App = (() => {
 
         renderEcomConfigUI();
         await renderAliasEditor();
+        await renderSettingsStoreGroups();
+        await renderSettingsFamilies();
         await renderCleanupSourcePanel();
 
         if (DriveSync.isConnected()) {
             const info = await DriveSync.getBackupInfo();
             UI.updateDriveStatus(info ? `Conectado. Ultimo backup: ${info.lastModified}` : 'Conectado.');
         }
+    }
+
+    // ============================
+    // SETTINGS: STORE GROUPS EDITOR (master-detail)
+    // ============================
+    // Mismo patron que el editor de Familias: arriba chips de grupos
+    // (clic = activar), abajo el editor del grupo activo con sus tiendas en
+    // grid de chips + selector para anadir. Persistencia: setting `storeGroups`.
+    const settingsGroupsState = {
+        activeId: null,    // id del grupo activo en el editor
+        search: '',        // texto de busqueda dentro del grupo activo
+        catalog: []        // lista de tiendas disponibles, cacheada por render
+    };
+
+    async function renderSettingsStoreGroups() {
+        const list = document.getElementById('settings-store-groups-list');
+        if (!list) return;
+        await loadStoreGroups();
+        settingsGroupsState.catalog = (await Database.getDistinctValues('store'))
+            .filter(s => !CSVParser.isNonStoreDept(s))
+            .sort((a, b) => a.localeCompare(b));
+
+        const groups = STORE_GROUPS.groups.slice().sort((a, b) => a.name.localeCompare(b.name));
+
+        // Resuelve activeId: si ya no existe (borrado), cae al primero disponible.
+        if (settingsGroupsState.activeId && !groups.find(g => g.id === settingsGroupsState.activeId)) {
+            settingsGroupsState.activeId = null;
+        }
+        if (!settingsGroupsState.activeId && groups.length) {
+            settingsGroupsState.activeId = groups[0].id;
+        }
+        const activeId = settingsGroupsState.activeId;
+
+        // === Chips de grupos ===
+        if (!groups.length) {
+            list.innerHTML = '<div class="store-groups-empty">No hay grupos. Anade el primero usando el campo de abajo.</div>';
+        } else {
+            list.innerHTML = groups.map(g => {
+                const isActive = g.id === activeId ? ' family-chip-active' : '';
+                return `<div class="family-chip${isActive}" data-group-id="${escapeHtml(g.id)}">
+                    <button type="button" class="family-chip-select" data-group-select="${escapeHtml(g.id)}" title="Editar tiendas de este grupo">
+                        <span class="family-name">${escapeHtml(g.name)}</span>
+                        <span class="family-chip-count">${g.stores.length}</span>
+                    </button>
+                    <button type="button" class="family-btn family-btn-danger" data-group-action="delete" data-group-id="${escapeHtml(g.id)}" title="Eliminar este grupo">Eliminar</button>
+                </div>`;
+            }).join('');
+        }
+
+        // === Editor del grupo activo ===
+        renderGroupEditor(activeId);
+
+        bindSettingsGroupsHandlers();
+    }
+
+    function renderGroupEditor(activeId) {
+        const title = document.getElementById('settings-group-editor-title');
+        const meta = document.getElementById('settings-group-editor-meta');
+        const renameBtn = document.getElementById('btn-settings-group-rename');
+        const chips = document.getElementById('settings-group-store-chips');
+        const pickerWrap = document.getElementById('settings-group-picker-wrap');
+        const picker = document.getElementById('settings-group-picker');
+        if (!title || !chips || !pickerWrap || !picker) return;
+
+        const group = activeId ? STORE_GROUPS.groups.find(g => g.id === activeId) : null;
+        if (!group) {
+            title.textContent = 'Tiendas';
+            meta.textContent = '';
+            renameBtn.classList.add('hidden');
+            chips.innerHTML = '<div class="empty-msg">Selecciona un grupo arriba para editar sus tiendas.</div>';
+            pickerWrap.classList.add('hidden');
+            return;
+        }
+
+        renameBtn.classList.remove('hidden');
+        title.textContent = group.name;
+        meta.textContent = `${group.stores.length} tienda${group.stores.length === 1 ? '' : 's'}`;
+
+        const term = settingsGroupsState.search.toLowerCase();
+        const memberSet = new Set(group.stores);
+
+        // Chips de miembros actuales (con el filtro de busqueda).
+        const visibleMembers = group.stores.slice().sort((a, b) => a.localeCompare(b))
+            .filter(s => !term || s.toLowerCase().includes(term));
+
+        if (!visibleMembers.length) {
+            chips.innerHTML = `<div class="empty-msg">${group.stores.length === 0
+                ? 'Este grupo no tiene tiendas todavia. Pulsa una del catalogo de abajo para anadirla.'
+                : 'Sin coincidencias con la busqueda.'}</div>`;
+        } else {
+            chips.innerHTML = visibleMembers.map(s => {
+                const inCatalog = settingsGroupsState.catalog.includes(s);
+                const orphanBadge = inCatalog ? '' :
+                    `<span class="family-badge family-badge-modified" title="Esta tienda no aparece en los datos actuales (posible cambio de nombre o tienda obsoleta)">Obsoleta</span>`;
+                return `<span class="cat-chip" data-store="${escapeHtml(s)}">
+                    <span class="cat-chip-name">${escapeHtml(s)}</span>
+                    ${orphanBadge}
+                    <button type="button" class="cat-chip-btn" data-store-remove="${escapeHtml(s)}" title="Quitar de este grupo">✕</button>
+                </span>`;
+            }).join('');
+        }
+
+        // Parrilla del catalogo: TODAS las tiendas, las del grupo marcadas.
+        // Click = toggle (anadir si no esta, quitar si esta). El filtro de
+        // busqueda tambien se aplica aqui para coherencia.
+        pickerWrap.classList.remove('hidden');
+        const visiblePicker = settingsGroupsState.catalog
+            .filter(s => !term || s.toLowerCase().includes(term));
+        if (!visiblePicker.length) {
+            picker.innerHTML = '<div class="empty-msg">No hay tiendas en el catalogo.</div>';
+        } else {
+            picker.innerHTML = visiblePicker.map(s => {
+                const isMember = memberSet.has(s);
+                const cls = isMember ? ' store-picker-chip-on' : '';
+                const icon = isMember
+                    ? '<span class="store-picker-icon" aria-hidden="true">✓</span>'
+                    : '<span class="store-picker-icon store-picker-icon-empty" aria-hidden="true">+</span>';
+                const title = isMember ? 'Quitar del grupo' : 'Anadir al grupo';
+                return `<button type="button" class="store-picker-chip${cls}" data-store-toggle="${escapeHtml(s)}" title="${title}" aria-pressed="${isMember}">
+                    ${icon}
+                    <span class="store-picker-name">${escapeHtml(s)}</span>
+                </button>`;
+            }).join('');
+        }
+    }
+
+    function bindSettingsGroupsHandlers() {
+        const list = document.getElementById('settings-store-groups-list');
+        const chips = document.getElementById('settings-group-store-chips');
+        const addBtn = document.getElementById('btn-settings-group-add');
+        const addInput = document.getElementById('settings-group-new-name');
+        const renameBtn = document.getElementById('btn-settings-group-rename');
+        const searchInput = document.getElementById('settings-groups-store-search');
+        const picker = document.getElementById('settings-group-picker');
+        if (!list) return;
+
+        if (addBtn && !addBtn.dataset.bound) {
+            addBtn.dataset.bound = '1';
+            addBtn.addEventListener('click', async () => {
+                const name = (addInput.value || '').trim();
+                if (!name) return;
+                const conflict = STORE_GROUPS.groups.find(g => g.name.toLowerCase() === name.toLowerCase());
+                if (conflict) { alert('Ya existe un grupo con ese nombre.'); return; }
+                const id = 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+                STORE_GROUPS.groups.push({ id, name, stores: [] });
+                settingsGroupsState.activeId = id;
+                addInput.value = '';
+                await saveStoreGroups();
+                renderAllStoreGroupsUI();
+                await renderSettingsStoreGroups();
+            });
+            addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
+        }
+
+        if (searchInput && !searchInput.dataset.bound) {
+            searchInput.dataset.bound = '1';
+            searchInput.addEventListener('input', debounce(async () => {
+                settingsGroupsState.search = searchInput.value || '';
+                await renderSettingsStoreGroups();
+            }, 200));
+        }
+
+        if (renameBtn && !renameBtn.dataset.bound) {
+            renameBtn.dataset.bound = '1';
+            renameBtn.addEventListener('click', async () => {
+                const group = STORE_GROUPS.groups.find(g => g.id === settingsGroupsState.activeId);
+                if (!group) return;
+                const newName = (prompt('Nuevo nombre:', group.name) || '').trim();
+                if (!newName || newName === group.name) return;
+                const conflict = STORE_GROUPS.groups.find(g => g.id !== group.id && g.name.toLowerCase() === newName.toLowerCase());
+                if (conflict) { alert('Ya existe un grupo con ese nombre.'); return; }
+                group.name = newName;
+                await saveStoreGroups();
+                renderAllStoreGroupsUI();
+                await renderSettingsStoreGroups();
+            });
+        }
+
+        list.querySelectorAll('button[data-group-select]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                settingsGroupsState.activeId = btn.dataset.groupSelect;
+                settingsGroupsState.search = '';
+                if (searchInput) searchInput.value = '';
+                await renderSettingsStoreGroups();
+            });
+        });
+
+        list.querySelectorAll('button[data-group-action="delete"]').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const id = btn.dataset.groupId;
+                const group = STORE_GROUPS.groups.find(g => g.id === id);
+                if (!group) return;
+                if (!confirm(`Eliminar el grupo "${group.name}"?`)) return;
+                STORE_GROUPS.groups = STORE_GROUPS.groups.filter(g => g.id !== id);
+                if (settingsGroupsState.activeId === id) settingsGroupsState.activeId = null;
+                await saveStoreGroups();
+                renderAllStoreGroupsUI();
+                await renderSettingsStoreGroups();
+            });
+        });
+
+        if (chips) {
+            chips.querySelectorAll('button[data-store-remove]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const store = btn.dataset.storeRemove;
+                    const group = STORE_GROUPS.groups.find(g => g.id === settingsGroupsState.activeId);
+                    if (!group) return;
+                    group.stores = group.stores.filter(s => s !== store);
+                    await saveStoreGroups();
+                    renderAllStoreGroupsUI();
+                    await renderSettingsStoreGroups();
+                });
+            });
+        }
+
+        if (picker) {
+            picker.querySelectorAll('button[data-store-toggle]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const store = btn.dataset.storeToggle;
+                    const group = STORE_GROUPS.groups.find(g => g.id === settingsGroupsState.activeId);
+                    if (!group) return;
+                    const idx = group.stores.indexOf(store);
+                    if (idx === -1) group.stores.push(store);
+                    else group.stores.splice(idx, 1);
+                    await saveStoreGroups();
+                    renderAllStoreGroupsUI();
+                    await renderSettingsStoreGroups();
+                });
+            });
+        }
+    }
+
+    // ============================
+    // SETTINGS: CATEGORY FAMILIES EDITOR
+    // ============================
+    // Editor completo: anadir/borrar familias y reasignar categorias.
+    // Persiste en setting `categoryFamilies` con el formato definido arriba.
+    // El JSON de fabrica nunca se modifica — los borrados se marcan en
+    // removedFamilies y las reasignaciones en categoryOverrides.
+    // Sentinel para representar la pseudo-familia "Sin mapear" en la UI master-detail.
+    const FAM_UNMAPPED = '__unmapped__';
+    const settingsFamiliesState = {
+        catSearch: '',
+        onlyOverrides: false,
+        activeFamily: null   // nombre de la familia activa, o FAM_UNMAPPED, o null al inicio
+    };
+
+    async function getCategoryFamiliesSetting() {
+        const v = await Database.getSetting('categoryFamilies');
+        return v && typeof v === 'object' ? v : {};
+    }
+
+    async function setCategoryFamiliesSetting(obj) {
+        await Database.setSetting('categoryFamilies', obj || {});
+        invalidateSupercategoryCache();
+        await loadSupercategoryMapping();
+    }
+
+    // Solo refresca Vista detalle si esta visible — si el usuario esta en
+    // Settings cuando edita, la proxima visita a Vista detalle la recarga
+    // sola desde navigateTo (que llama refreshDashDetail).
+    function refreshDashDetailIfVisible() {
+        const sec = document.getElementById('section-dash-detail');
+        if (sec && !sec.classList.contains('hidden')) refreshDashDetail();
+    }
+
+    // Resuelve a que familia efectiva pertenece una categoria (override > factory > Sin mapear).
+    function getEffectiveFamily(cat, overrides) {
+        const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
+        if (Object.prototype.hasOwnProperty.call(overrides, cat)) {
+            const v = overrides[cat];
+            return v || '';   // '' => Sin mapear
+        }
+        return factoryVal;
+    }
+
+    // Devuelve el set completo de categorias conocidas: factory + overrides + las
+    // que aparecen en operations (por si hay alguna que el JSON no contemplara).
+    async function getKnownCategories(overrides) {
+        const set = new Set([
+            ...Object.keys(factoryFamiliesMapping || {}),
+            ...Object.keys(overrides || {})
+        ]);
+        try {
+            const ops = await Database.getAllOperations();
+            for (const r of ops) if (r.category) set.add(r.category);
+        } catch (_) {}
+        return [...set].sort((a, b) => a.localeCompare(b));
+    }
+
+    async function renderSettingsFamilies() {
+        const familiesList = document.getElementById('settings-families-list');
+        const catsList = document.getElementById('settings-categories-list');
+        if (!familiesList || !catsList) return;
+
+        await loadSupercategoryMapping();
+        const setting = await getCategoryFamiliesSetting();
+        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
+        const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? setting.categoryOverrides : {};
+        const factoryList = factoryFamiliesList || [];
+
+        // Familias visibles (factory no ocultas + custom). Para conteos usamos
+        // todas las categorias conocidas y a que familia caen efectivamente.
+        const customFamilies = SUPERCATEGORY_LIST.filter(f => !factoryList.includes(f));
+        const allFamilyEntries = [
+            ...factoryList.map(name => ({ name, origin: 'factory', visible: !removed.has(name) })),
+            ...customFamilies.map(name => ({ name, origin: 'custom', visible: true }))
+        ];
+
+        const allCats = await getKnownCategories(overrides);
+        const countByFamily = new Map();
+        for (const cat of allCats) {
+            const fam = getEffectiveFamily(cat, overrides);
+            // Si la familia efectiva esta oculta o no existe, cuenta como Sin mapear.
+            const fkey = (fam && SUPERCATEGORY_LIST.includes(fam)) ? fam : FAM_UNMAPPED;
+            countByFamily.set(fkey, (countByFamily.get(fkey) || 0) + 1);
+        }
+
+        // Default de familia activa: la primera familia visible con categorias,
+        // o Sin mapear si no hay ninguna asignacion aun.
+        if (!settingsFamiliesState.activeFamily ||
+            (settingsFamiliesState.activeFamily !== FAM_UNMAPPED &&
+                !SUPERCATEGORY_LIST.includes(settingsFamiliesState.activeFamily))) {
+            const firstWithCats = allFamilyEntries.find(f => f.visible && (countByFamily.get(f.name) || 0) > 0);
+            settingsFamiliesState.activeFamily = firstWithCats ? firstWithCats.name : FAM_UNMAPPED;
+        }
+        const active = settingsFamiliesState.activeFamily;
+
+        // === Chips de familias ===
+        if (!allFamilyEntries.length) {
+            familiesList.innerHTML = '<div class="store-groups-empty">El JSON de familias no se cargo. Revisa data/categories-supercategories.json.</div>';
+        } else {
+            const chips = allFamilyEntries.map(f => {
+                const count = countByFamily.get(f.name) || 0;
+                const badge = f.origin === 'factory'
+                    ? `<span class="family-badge family-badge-factory" title="Definida en data/categories-supercategories.json">Fabrica</span>`
+                    : `<span class="family-badge family-badge-custom" title="Familia anadida por el usuario">Custom</span>`;
+                const hiddenCls = f.visible ? '' : ' family-hidden';
+                const activeCls = f.visible && active === f.name ? ' family-chip-active' : '';
+                const action = f.visible
+                    ? `<button type="button" class="family-btn family-btn-danger" data-fam-action="hide" data-fam="${escapeHtml(f.name)}" data-origin="${f.origin}" title="${f.origin === 'factory' ? 'Ocultar familia (sus categorias caen a Sin mapear hasta restaurar)' : 'Eliminar familia (sus categorias caen a Sin mapear)'}">${f.origin === 'factory' ? 'Ocultar' : 'Eliminar'}</button>`
+                    : `<button type="button" class="family-btn" data-fam-action="restore" data-fam="${escapeHtml(f.name)}" title="Restaurar familia">Restaurar</button>`;
+                const select = f.visible
+                    ? `<button type="button" class="family-chip-select" data-fam-select="${escapeHtml(f.name)}" title="Editar categorias de esta familia">
+                        <span class="family-name">${escapeHtml(f.name)}</span>
+                        <span class="family-chip-count">${count}</span>
+                    </button>`
+                    : `<span class="family-chip-select"><span class="family-name">${escapeHtml(f.name)}</span></span>`;
+                return `<div class="family-chip${hiddenCls}${activeCls}">
+                    ${select}
+                    ${badge}
+                    ${action}
+                </div>`;
+            }).join('');
+
+            const unmappedCount = countByFamily.get(FAM_UNMAPPED) || 0;
+            const unmappedActive = active === FAM_UNMAPPED ? ' family-chip-active' : '';
+            const unmappedChip = `<div class="family-chip family-chip-unmapped${unmappedActive}">
+                <button type="button" class="family-chip-select" data-fam-select="${FAM_UNMAPPED}" title="Categorias actualmente sin familia asignada">
+                    <span class="family-name">Sin mapear</span>
+                    <span class="family-chip-count">${unmappedCount}</span>
+                </button>
+            </div>`;
+
+            familiesList.innerHTML = chips + unmappedChip;
+        }
+
+        // === Editor de la familia activa ===
+        renderFamilyEditor(active, allCats, overrides);
+
+        bindSettingsFamiliesHandlers();
+    }
+
+    function renderFamilyEditor(active, allCats, overrides) {
+        const title = document.getElementById('settings-family-editor-title');
+        const meta = document.getElementById('settings-family-editor-meta');
+        const chips = document.getElementById('settings-categories-list');
+        const addRow = document.getElementById('settings-family-add-row');
+        const addSelect = document.getElementById('settings-family-add-select');
+
+        if (!title || !chips) return;
+
+        const isUnmapped = active === FAM_UNMAPPED;
+        const visibleFamilies = SUPERCATEGORY_LIST.slice();
+
+        // Categorias asignadas a la familia activa (las que su familia efectiva
+        // es 'active', o Sin mapear si caen ahi por estar la familia oculta).
+        const inFamily = allCats.filter(cat => {
+            const fam = getEffectiveFamily(cat, overrides);
+            const fkey = (fam && SUPERCATEGORY_LIST.includes(fam)) ? fam : FAM_UNMAPPED;
+            return fkey === active;
+        });
+
+        const term = settingsFamiliesState.catSearch.toLowerCase();
+        const onlyOv = settingsFamiliesState.onlyOverrides;
+
+        title.textContent = isUnmapped ? 'Sin mapear' : (active || '');
+        meta.textContent = `${inFamily.length} categoria${inFamily.length === 1 ? '' : 's'}` + (isUnmapped ? ' sin familia' : '');
+
+        const filtered = inFamily.filter(cat => {
+            if (term && !cat.toLowerCase().includes(term)) return false;
+            const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
+            const isOverride = Object.prototype.hasOwnProperty.call(overrides, cat) &&
+                               (overrides[cat] || '') !== factoryVal;
+            if (onlyOv && !isOverride) return false;
+            return true;
+        });
+
+        if (!filtered.length) {
+            chips.innerHTML = `<div class="empty-msg">${inFamily.length === 0
+                ? (isUnmapped ? 'No hay categorias sin asignar.' : 'Esta familia no tiene categorias todavia. Anade alguna desde el selector de abajo.')
+                : 'Sin coincidencias con los filtros actuales.'}</div>`;
+        } else {
+            chips.innerHTML = filtered.map(cat => {
+                const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
+                const overrideVal = Object.prototype.hasOwnProperty.call(overrides, cat) ? (overrides[cat] || '') : null;
+                const isOverride = overrideVal !== null && overrideVal !== factoryVal;
+                const badge = isOverride
+                    ? `<span class="family-badge family-badge-modified" title="Asignacion cambiada por el usuario respecto a la fabrica (factory: ${escapeHtml(factoryVal || 'Sin mapear')})">Modificada</span>`
+                    : '';
+                // En Sin mapear el chip lleva un selector para asignar familia.
+                // En una familia normal el chip lleva un selector para mover
+                // (incluyendo "Sin mapear") + restaurar a fabrica si es override.
+                const moveOpts = ['<option value="" disabled selected>Mover a...</option>',
+                    `<option value="${FAM_UNMAPPED}">Sin mapear</option>`,
+                    ...visibleFamilies.filter(f => f !== active).map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`)
+                ].join('');
+                const restoreBtn = isOverride
+                    ? `<button type="button" class="cat-chip-btn" data-cat-action="restore" data-cat="${escapeHtml(cat)}" title="Restaurar a fabrica (${escapeHtml(factoryVal || 'Sin mapear')})">↺</button>`
+                    : '';
+                return `<span class="cat-chip" data-cat="${escapeHtml(cat)}">
+                    <span class="cat-chip-name">${escapeHtml(cat)}</span>
+                    ${badge}
+                    <select class="cat-chip-move" data-cat-move="${escapeHtml(cat)}" title="Mover esta categoria a otra familia">${moveOpts}</select>
+                    ${restoreBtn}
+                </span>`;
+            }).join('');
+        }
+
+        // Selector "Añadir categoria": solo tiene sentido en familias reales,
+        // no en Sin mapear (donde "añadir" significaria quitar de su familia
+        // actual, mejor hacerlo desde esa familia con "Mover a... Sin mapear").
+        if (isUnmapped) {
+            addRow.classList.add('hidden');
+        } else {
+            addRow.classList.remove('hidden');
+            // Candidatas: todas las que NO estan ya en la familia activa.
+            const candidates = allCats.filter(cat => !inFamily.includes(cat));
+            // Agrupar por familia actual (Sin mapear primero, luego cada otra familia).
+            const groups = new Map();
+            groups.set(FAM_UNMAPPED, []);
+            for (const fam of visibleFamilies) if (fam !== active) groups.set(fam, []);
+            for (const cat of candidates) {
+                const fam = getEffectiveFamily(cat, overrides);
+                const fkey = (fam && SUPERCATEGORY_LIST.includes(fam) && fam !== active) ? fam : FAM_UNMAPPED;
+                if (!groups.has(fkey)) groups.set(fkey, []);
+                groups.get(fkey).push(cat);
+            }
+            const groupLabel = (key) => key === FAM_UNMAPPED ? 'Sin mapear' : key;
+            let optsHtml = '<option value="">+ Anadir categoria...</option>';
+            for (const [key, cats] of groups.entries()) {
+                if (!cats.length) continue;
+                optsHtml += `<optgroup label="${escapeHtml(groupLabel(key))}">`;
+                optsHtml += cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+                optsHtml += '</optgroup>';
+            }
+            addSelect.innerHTML = optsHtml;
+            addSelect.value = '';
+        }
+    }
+
+    function bindSettingsFamiliesHandlers() {
+        const familiesList = document.getElementById('settings-families-list');
+        const catsList = document.getElementById('settings-categories-list');
+        const addBtn = document.getElementById('btn-settings-family-add');
+        const addInput = document.getElementById('settings-family-new-name');
+        const searchInput = document.getElementById('settings-families-cat-search');
+        const onlyOv = document.getElementById('settings-families-only-overrides');
+        const addSelect = document.getElementById('settings-family-add-select');
+
+        if (addBtn && !addBtn.dataset.bound) {
+            addBtn.dataset.bound = '1';
+            addBtn.addEventListener('click', async () => {
+                const name = (addInput.value || '').trim();
+                if (!name) return;
+                if (SUPERCATEGORY_LIST.includes(name)) { alert('Ya existe una familia con ese nombre.'); return; }
+                const setting = await getCategoryFamiliesSetting();
+                const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
+                if (removed.has(name)) {
+                    removed.delete(name);
+                    setting.removedFamilies = [...removed];
+                } else {
+                    const list = Array.isArray(setting.families) ? setting.families.slice() : SUPERCATEGORY_LIST.slice();
+                    if (!list.includes(name)) list.push(name);
+                    setting.families = list;
+                }
+                await setCategoryFamiliesSetting(setting);
+                addInput.value = '';
+                settingsFamiliesState.activeFamily = name;
+                await renderSettingsFamilies();
+                refreshDashDetailIfVisible();
+            });
+            addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') addBtn.click(); });
+        }
+
+        if (searchInput && !searchInput.dataset.bound) {
+            searchInput.dataset.bound = '1';
+            searchInput.addEventListener('input', debounce(async () => {
+                settingsFamiliesState.catSearch = searchInput.value || '';
+                await renderSettingsFamilies();
+            }, 200));
+        }
+        if (onlyOv && !onlyOv.dataset.bound) {
+            onlyOv.dataset.bound = '1';
+            onlyOv.addEventListener('change', async () => {
+                settingsFamiliesState.onlyOverrides = !!onlyOv.checked;
+                await renderSettingsFamilies();
+            });
+        }
+
+        if (familiesList) {
+            // Click en el chip de familia (no en los botones de accion) → activarla.
+            familiesList.querySelectorAll('button[data-fam-select]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    settingsFamiliesState.activeFamily = btn.dataset.famSelect;
+                    await renderSettingsFamilies();
+                });
+            });
+            familiesList.querySelectorAll('button[data-fam-action]').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const name = btn.dataset.fam;
+                    const origin = btn.dataset.origin;
+                    const action = btn.dataset.famAction;
+                    const setting = await getCategoryFamiliesSetting();
+                    if (action === 'hide' && origin === 'factory') {
+                        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
+                        removed.add(name);
+                        setting.removedFamilies = [...removed];
+                        if (Array.isArray(setting.families)) {
+                            setting.families = setting.families.filter(f => f !== name);
+                        }
+                    } else if (action === 'hide' && origin === 'custom') {
+                        if (Array.isArray(setting.families)) {
+                            setting.families = setting.families.filter(f => f !== name);
+                        }
+                    } else if (action === 'restore') {
+                        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
+                        removed.delete(name);
+                        setting.removedFamilies = [...removed];
+                        if (Array.isArray(setting.families) && !setting.families.includes(name)) {
+                            setting.families.push(name);
+                        }
+                    }
+                    // Si la familia activa desaparece, caera al default en el siguiente render.
+                    if (settingsFamiliesState.activeFamily === name && (action === 'hide')) {
+                        settingsFamiliesState.activeFamily = null;
+                    }
+                    await setCategoryFamiliesSetting(setting);
+                    await renderSettingsFamilies();
+                    refreshDashDetailIfVisible();
+                });
+            });
+        }
+
+        if (catsList) {
+            // Move chip → otra familia o Sin mapear.
+            catsList.querySelectorAll('select[data-cat-move]').forEach(sel => {
+                sel.addEventListener('change', async () => {
+                    const cat = sel.dataset.catMove;
+                    const target = sel.value;
+                    if (!target) return;
+                    await reassignCategory(cat, target === FAM_UNMAPPED ? '' : target);
+                });
+            });
+            catsList.querySelectorAll('button[data-cat-action]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (btn.dataset.catAction !== 'restore') return;
+                    const cat = btn.dataset.cat;
+                    const setting = await getCategoryFamiliesSetting();
+                    const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? { ...setting.categoryOverrides } : {};
+                    delete overrides[cat];
+                    setting.categoryOverrides = overrides;
+                    await setCategoryFamiliesSetting(setting);
+                    await renderSettingsFamilies();
+                    refreshDashDetailIfVisible();
+                });
+            });
+        }
+
+        if (addSelect && !addSelect.dataset.bound) {
+            addSelect.dataset.bound = '1';
+            addSelect.addEventListener('change', async () => {
+                const cat = addSelect.value;
+                if (!cat) return;
+                const target = settingsFamiliesState.activeFamily;
+                if (!target || target === FAM_UNMAPPED) return;
+                await reassignCategory(cat, target);
+            });
+        }
+    }
+
+    // Asigna una categoria a una familia (o Sin mapear si family es '').
+    // Si la asignacion coincide con factory, eliminamos el override.
+    async function reassignCategory(cat, family) {
+        const setting = await getCategoryFamiliesSetting();
+        const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? { ...setting.categoryOverrides } : {};
+        const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
+        if ((family || '') === factoryVal) {
+            delete overrides[cat];
+        } else {
+            overrides[cat] = family;
+        }
+        setting.categoryOverrides = overrides;
+        await setCategoryFamiliesSetting(setting);
+        await renderSettingsFamilies();
+        refreshDashDetailIfVisible();
     }
 
     // ============================
@@ -2949,123 +3933,43 @@ const App = (() => {
         return instance;
     }
 
+    // En las vistas de dashboard solo se RENDERIZA el selector "Aplicar grupo"
+    // (read-only respecto a la edicion). La gestion completa (crear, renombrar,
+    // editar miembros, borrar) vive en Configuracion → Grupos de tiendas.
     function renderStoreGroupsUIFor(inst) {
         const { prefix } = inst;
         const select = document.getElementById(`${prefix}-groups-select`);
-        const manageBtn = document.getElementById(`${prefix}-groups-manage`);
-        const list = document.getElementById(`${prefix}-groups-list`);
-        if (!select || !manageBtn || !list) return;
-
+        if (!select) return;
         const opts = ['<option value="">-- Aplicar grupo --</option>'];
         for (const g of STORE_GROUPS.groups) {
             opts.push(`<option value="${escapeHtml(g.id)}">${escapeHtml(g.name)} (${g.stores.length})</option>`);
         }
         select.innerHTML = opts.join('');
         select.value = '';
-
-        manageBtn.textContent = inst.managing ? 'Cerrar gestion' : 'Gestionar grupos...';
-
-        if (inst.managing) {
-            list.classList.remove('hidden');
-            if (!STORE_GROUPS.groups.length) {
-                list.innerHTML = '<div class="store-groups-empty">No hay grupos guardados.</div>';
-            } else {
-                list.innerHTML = STORE_GROUPS.groups.map(g =>
-                    `<div class="store-group-row" data-group-id="${escapeHtml(g.id)}">
-                        <span class="store-group-name" title="${g.stores.map(escapeHtml).join(', ')}">${escapeHtml(g.name)}</span>
-                        <span class="store-group-count">${g.stores.length}</span>
-                        <button type="button" class="store-group-btn" data-action="rename" title="Renombrar">Renombrar</button>
-                        <button type="button" class="store-group-btn" data-action="update" title="Actualizar con la seleccion actual">Actualizar</button>
-                        <button type="button" class="store-group-btn store-group-btn-danger" data-action="delete" title="Eliminar">Eliminar</button>
-                    </div>`
-                ).join('');
-            }
-        } else {
-            list.classList.add('hidden');
-        }
     }
 
-    // Re-render the group toolbar/list on every registered view (used after
-    // create/update/delete so both views stay in sync).
+    // Re-render todos los selectores de grupo (Vista general + Vista detalle)
+    // tras un cambio en Configuracion.
     function renderAllStoreGroupsUI() {
         for (const inst of storeGroupsInstances) renderStoreGroupsUIFor(inst);
     }
 
     function initStoreGroupsInstanceHandlers(inst) {
-        const { prefix, getVisibleStores, setVisibleStores, getAllStores, refresh } = inst;
+        const { prefix, setVisibleStores, getAllStores, refresh } = inst;
         const select = document.getElementById(`${prefix}-groups-select`);
-        const saveBtn = document.getElementById(`${prefix}-groups-save`);
-        const manageBtn = document.getElementById(`${prefix}-groups-manage`);
-        const list = document.getElementById(`${prefix}-groups-list`);
-        if (!select || !saveBtn || !manageBtn || !list) return;
-
+        if (!select) return;
         select.addEventListener('change', () => {
             const id = select.value;
             if (!id) return;
             const g = STORE_GROUPS.groups.find(x => x.id === id);
             if (!g) return;
-            // Apply only stores currently available in this view's data
+            // Aplica solo tiendas que esten disponibles en los datos actuales
+            // de esta vista (descarta tiendas obsoletas del grupo).
             const all = getAllStores();
             const validSet = new Set(g.stores.filter(s => all.includes(s)));
             setVisibleStores(validSet);
             select.value = '';
             refresh();
-        });
-
-        saveBtn.addEventListener('click', async () => {
-            const selected = [...(getVisibleStores() || [])];
-            if (!selected.length) {
-                alert('Selecciona al menos una tienda antes de guardar un grupo.');
-                return;
-            }
-            const name = (prompt('Nombre del grupo:') || '').trim();
-            if (!name) return;
-            const existing = STORE_GROUPS.groups.find(g => g.name.toLowerCase() === name.toLowerCase());
-            if (existing) {
-                if (!confirm(`Ya existe un grupo llamado "${existing.name}". Sobrescribir?`)) return;
-                existing.stores = selected;
-            } else {
-                STORE_GROUPS.groups.push({
-                    id: 'g_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-                    name,
-                    stores: selected
-                });
-            }
-            await saveStoreGroups();
-            renderAllStoreGroupsUI();
-        });
-
-        manageBtn.addEventListener('click', () => {
-            inst.managing = !inst.managing;
-            renderStoreGroupsUIFor(inst);
-        });
-
-        list.addEventListener('click', async (e) => {
-            const btn = e.target.closest('button[data-action]');
-            if (!btn) return;
-            const row = btn.closest('[data-group-id]');
-            const id = row && row.dataset.groupId;
-            const group = STORE_GROUPS.groups.find(g => g.id === id);
-            if (!group) return;
-
-            const action = btn.dataset.action;
-            if (action === 'rename') {
-                const newName = (prompt('Nuevo nombre:', group.name) || '').trim();
-                if (!newName || newName === group.name) return;
-                const conflict = STORE_GROUPS.groups.find(g => g.id !== id && g.name.toLowerCase() === newName.toLowerCase());
-                if (conflict) { alert('Ya existe un grupo con ese nombre.'); return; }
-                group.name = newName;
-            } else if (action === 'update') {
-                const selected = [...(getVisibleStores() || [])];
-                if (!selected.length) { alert('Selecciona al menos una tienda antes de actualizar.'); return; }
-                if (!confirm(`Actualizar "${group.name}" con la seleccion actual (${selected.length} tiendas)?`)) return;
-                group.stores = selected;
-            } else if (action === 'delete') {
-                if (!confirm(`Eliminar el grupo "${group.name}"?`)) return;
-                STORE_GROUPS.groups = STORE_GROUPS.groups.filter(g => g.id !== id);
-            }
-            await saveStoreGroups();
-            renderAllStoreGroupsUI();
         });
     }
 
@@ -3364,6 +4268,24 @@ const App = (() => {
         const allData = await Database.getAllOperations();
         const rangeRecords = allData.filter(r => r.week >= weekFrom && r.week <= weekTo);
         const buckets = aggregateByStore(rangeRecords);
+
+        // Inyecta attachment del rango: crea bucket si la (store, week) no aparece
+        // en operations. Vista general suma por rango, asi que basta acumular.
+        const attachRowsDg = await Database.getAllAttachmentWeekly();
+        for (const a of attachRowsDg) {
+            if (a.week < weekFrom || a.week > weekTo) continue;
+            if (!buckets[a.store]) buckets[a.store] = emptyBucket();
+            buckets[a.store].attachSaleTxs += a.saleTransactions;
+            buckets[a.store].attachWithMember += a.attachmentTransactions;
+        }
+
+        // Filtro defensivo: si por lo que sea (parser desactualizado, backup
+        // antiguo, fila colada en attachment) llega un nombre de departamento
+        // (ES Ecommerce, RMA, etc.), no lo enseñamos como tienda. El parser ya
+        // los descarta al importar; este filtro es belt-and-suspenders.
+        for (const s of Object.keys(buckets)) {
+            if (CSVParser.isNonStoreDept(s)) delete buckets[s];
+        }
 
         // Populate store multi-select state
         const allStoresArr = Object.keys(buckets).sort((a, b) => a.localeCompare(b));
