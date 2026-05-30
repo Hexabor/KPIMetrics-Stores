@@ -2957,6 +2957,48 @@ tr:hover { background: #f8fafc; }
     border: 1px dashed var(--color-border);
 }
 
+.store-picker-icon.store-picker-icon-other {
+    background: #fde68a;
+    color: #92400e;
+}
+
+/* Family editor (parrilla de categorias): tercer estado "en otra familia" */
+.store-picker-chip.cat-picker-chip-other {
+    background: var(--color-surface);
+    border-style: dashed;
+}
+
+.store-picker-chip.cat-picker-chip-other:hover {
+    border-color: #f59e0b;
+    background: #fff7e0;
+}
+
+.cat-picker-other-fam {
+    margin-left: auto;
+    font-size: 0.6rem;
+    background: var(--color-border-light);
+    color: var(--color-text-lighter);
+    padding: 0.05rem 0.4rem;
+    border-radius: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.store-picker-chip:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.cat-picker-hint {
+    font-size: 0.72rem;
+    color: var(--color-text-lighter);
+    padding: 0.4rem 0.6rem;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: 3px;
+    margin-bottom: 0.5rem;
+}
+
 .store-picker-name {
     flex: 1;
     min-width: 0;

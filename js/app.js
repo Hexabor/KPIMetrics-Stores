@@ -2814,9 +2814,13 @@ const App = (() => {
         await loadFamilyMapping();
         const allCats = await getKnownCategories();
         const countByFamily = new Map();
+        // Almacenamos las cuentas usando el SENTINEL FAM_UNMAPPED para la
+        // pseudo-familia "Sin familia", no la label. Asi el lookup
+        // countByFamily.get(FAM_UNMAPPED) funciona en la UI de abajo.
         for (const cat of allCats) {
-            const fam = getFamily(cat);   // devuelve UNMAPPED_FAMILY si no tiene
-            countByFamily.set(fam, (countByFamily.get(fam) || 0) + 1);
+            const fam = getFamily(cat);   // devuelve UNMAPPED_FAMILY (label) o nombre real
+            const key = (fam === UNMAPPED_FAMILY) ? FAM_UNMAPPED : fam;
+            countByFamily.set(key, (countByFamily.get(key) || 0) + 1);
         }
 
         // Default de familia activa: la primera con categorias, o Sin familia
@@ -2861,71 +2865,94 @@ const App = (() => {
         bindSettingsFamiliesHandlers();
     }
 
-    // Constante sentinel (compartida con la UI antigua) — la "Sin familia"
-    // ahora; el nombre FAM_UNMAPPED se mantiene en el codigo por compatibilidad.
+    // Etiqueta humana de la pseudo-familia "Sin familia".
     const FAM_UNMAPPED_LABEL = 'Sin familia';
+
+    // Devuelve true si la categoria esta efectivamente en la familia activa.
+    // "Sin familia" se modela con el sentinel FAM_UNMAPPED en la UI, pero
+    // getFamily() devuelve la label UNMAPPED_FAMILY; este helper unifica.
+    function catIsInActive(cat, active) {
+        const fam = getFamily(cat);
+        if (active === FAM_UNMAPPED) return fam === UNMAPPED_FAMILY;
+        return fam === active;
+    }
 
     function renderFamilyEditor(active, allCats) {
         const title = document.getElementById('settings-family-editor-title');
         const meta = document.getElementById('settings-family-editor-meta');
-        const chips = document.getElementById('settings-categories-list');
-        const addRow = document.getElementById('settings-family-add-row');
-        const addSelect = document.getElementById('settings-family-add-select');
-        if (!title || !chips || !addRow || !addSelect) return;
+        const hint = document.getElementById('settings-cat-picker-hint');
+        const grid = document.getElementById('settings-categories-list');
+        if (!title || !grid) return;
 
         const isUnmapped = active === FAM_UNMAPPED;
-        const inFamily = allCats.filter(cat => getFamily(cat) === active);
+        const inFamily = allCats.filter(cat => catIsInActive(cat, active));
 
         const term = settingsFamiliesState.catSearch.toLowerCase();
-        title.textContent = isUnmapped ? 'Sin familia' : (active || '');
+        title.textContent = isUnmapped ? FAM_UNMAPPED_LABEL : (active || '');
         meta.textContent = `${inFamily.length} categoria${inFamily.length === 1 ? '' : 's'}`;
 
-        const filtered = inFamily.filter(cat => !term || cat.toLowerCase().includes(term));
+        if (hint) {
+            hint.classList.remove('hidden');
+            hint.textContent = isUnmapped
+                ? 'Estas categorias no estan asignadas a ninguna familia. Activa una familia arriba y pulsa una categoria para asignarla.'
+                : `Pulsa cualquier categoria para anadirla a "${active}" o quitarla. Las que ya estan en otra familia se moveran a esta al pulsarlas.`;
+        }
 
-        if (!filtered.length) {
-            chips.innerHTML = `<div class="empty-msg">${inFamily.length === 0
-                ? (isUnmapped ? 'Todas las categorias estan asignadas a alguna familia. ¡Bien hecho!' : 'Esta familia no tiene categorias todavia. Anadelas con el selector de abajo o desde otra familia con "Mover a...".')
+        // En Sin familia: solo mostramos las categorias sin familia (lista
+        // pasiva). En una familia real: parrilla con TODAS las categorias y
+        // tres estados (en-esta / en-otra / sin-familia).
+        const candidates = isUnmapped ? inFamily : allCats;
+        const visible = candidates.filter(cat => !term || cat.toLowerCase().includes(term));
+
+        if (!visible.length) {
+            grid.innerHTML = `<div class="empty-msg">${candidates.length === 0
+                ? (isUnmapped
+                    ? 'Todas las categorias estan asignadas a alguna familia. ¡Bien hecho!'
+                    : 'No hay categorias conocidas. Importa algun CSV primero.')
                 : 'Sin coincidencias con la busqueda.'}</div>`;
-        } else {
-            chips.innerHTML = filtered.map(cat => {
-                // Selector para mover: incluye Sin familia + las demas familias.
-                const moveOpts = ['<option value="" disabled selected>Mover a...</option>',
-                    `<option value="${FAM_UNMAPPED}">${FAM_UNMAPPED_LABEL}</option>`,
-                    ...FAMILY_LIST.filter(f => f !== active).map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`)
-                ].join('');
-                return `<span class="cat-chip" data-cat="${escapeHtml(cat)}">
-                    <span class="cat-chip-name">${escapeHtml(cat)}</span>
-                    <select class="cat-chip-move" data-cat-move="${escapeHtml(cat)}" title="Mover esta categoria a otra familia">${moveOpts}</select>
-                </span>`;
-            }).join('');
+            return;
         }
 
-        // Selector "Añadir categoria": solo en familias reales (no en Sin familia).
-        if (isUnmapped || !FAMILY_LIST.length) {
-            addRow.classList.add('hidden');
-        } else {
-            addRow.classList.remove('hidden');
-            const candidates = allCats.filter(cat => !inFamily.includes(cat));
-            const groups = new Map();
-            groups.set(FAM_UNMAPPED, []);
-            for (const fam of FAMILY_LIST) if (fam !== active) groups.set(fam, []);
-            for (const cat of candidates) {
-                const fam = getFamily(cat);
-                const fkey = (fam !== UNMAPPED_FAMILY && FAMILY_LIST.includes(fam) && fam !== active) ? fam : FAM_UNMAPPED;
-                if (!groups.has(fkey)) groups.set(fkey, []);
-                groups.get(fkey).push(cat);
+        grid.innerHTML = visible.map(cat => {
+            const fam = getFamily(cat);
+            const isInActive = catIsInActive(cat, active);
+            const isInOther = !isInActive && fam !== UNMAPPED_FAMILY;
+            const isUnassigned = !isInActive && fam === UNMAPPED_FAMILY;
+
+            let stateCls = '';
+            let icon = '';
+            let badge = '';
+            let titleAttr = '';
+
+            if (isInActive) {
+                stateCls = 'store-picker-chip-on';
+                icon = '<span class="store-picker-icon" aria-hidden="true">✓</span>';
+                titleAttr = isUnmapped
+                    ? 'Sin familia (activa otra familia para asignarla)'
+                    : `Quitar de "${active}" (pasara a Sin familia)`;
+            } else if (isInOther) {
+                stateCls = 'cat-picker-chip-other';
+                icon = '<span class="store-picker-icon store-picker-icon-other" aria-hidden="true">→</span>';
+                badge = `<span class="cat-picker-other-fam" title="Actualmente en ${escapeHtml(fam)}">${escapeHtml(fam)}</span>`;
+                titleAttr = isUnmapped
+                    ? `Quitar de "${fam}" (pasara a Sin familia)`
+                    : `Mover de "${fam}" a "${active}"`;
+            } else if (isUnassigned) {
+                icon = '<span class="store-picker-icon store-picker-icon-empty" aria-hidden="true">+</span>';
+                titleAttr = `Anadir a "${active}"`;
             }
-            const groupLabel = (key) => key === FAM_UNMAPPED ? FAM_UNMAPPED_LABEL : key;
-            let optsHtml = '<option value="">+ Anadir categoria...</option>';
-            for (const [key, cats] of groups.entries()) {
-                if (!cats.length) continue;
-                optsHtml += `<optgroup label="${escapeHtml(groupLabel(key))}">`;
-                optsHtml += cats.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
-                optsHtml += '</optgroup>';
-            }
-            addSelect.innerHTML = optsHtml;
-            addSelect.value = '';
-        }
+
+            // En Sin familia, pulsar una categoria ya unmapped no tiene
+            // accion util: la deshabilitamos para que sea claro.
+            const isDisabled = isUnmapped && isInActive;
+            const disabledAttr = isDisabled ? ' disabled' : '';
+
+            return `<button type="button" class="store-picker-chip ${stateCls}"${disabledAttr} data-cat-toggle="${escapeHtml(cat)}" data-cat-fam="${escapeHtml(fam)}" title="${escapeHtml(titleAttr)}" aria-pressed="${isInActive}">
+                ${icon}
+                <span class="store-picker-name">${escapeHtml(cat)}</span>
+                ${badge}
+            </button>`;
+        }).join('');
     }
 
     function bindSettingsFamiliesHandlers() {
@@ -2934,7 +2961,6 @@ const App = (() => {
         const addBtn = document.getElementById('btn-settings-family-add');
         const addInput = document.getElementById('settings-family-new-name');
         const searchInput = document.getElementById('settings-families-cat-search');
-        const addSelect = document.getElementById('settings-family-add-select');
 
         if (addBtn && !addBtn.dataset.bound) {
             addBtn.dataset.bound = '1';
@@ -2996,24 +3022,30 @@ const App = (() => {
         }
 
         if (catsList) {
-            catsList.querySelectorAll('select[data-cat-move]').forEach(sel => {
-                sel.addEventListener('change', async () => {
-                    const cat = sel.dataset.catMove;
-                    const target = sel.value;
-                    if (!target) return;
-                    await assignCategoryToFamily(cat, target === FAM_UNMAPPED ? '' : target);
-                });
-            });
-        }
+            // Parrilla toggle: click sobre una categoria la asigna a la
+            // familia activa, la quita (si ya estaba) o la mueve desde otra.
+            catsList.querySelectorAll('button[data-cat-toggle]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (btn.disabled) return;
+                    const cat = btn.dataset.catToggle;
+                    const currentFam = btn.dataset.catFam;   // label de getFamily
+                    const active = settingsFamiliesState.activeFamily;
+                    const isUnmapped = active === FAM_UNMAPPED;
 
-        if (addSelect && !addSelect.dataset.bound) {
-            addSelect.dataset.bound = '1';
-            addSelect.addEventListener('change', async () => {
-                const cat = addSelect.value;
-                if (!cat) return;
-                const target = settingsFamiliesState.activeFamily;
-                if (!target || target === FAM_UNMAPPED) return;
-                await assignCategoryToFamily(cat, target);
+                    let target;
+                    if (isUnmapped) {
+                        // En "Sin familia" pulsar una categoria que ya estaba sin
+                        // familia es no-op (el boton esta disabled). Si esta en
+                        // otra familia, quitarla la lleva a Sin familia.
+                        if (currentFam === UNMAPPED_FAMILY) return;
+                        target = '';  // sin familia
+                    } else {
+                        // Familia real: si ya esta aqui, quitarla. Si no, asignar.
+                        if (currentFam === active) target = '';
+                        else target = active;
+                    }
+                    await assignCategoryToFamily(cat, target);
+                });
             });
         }
     }
