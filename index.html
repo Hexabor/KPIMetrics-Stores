@@ -501,10 +501,6 @@
                             </div>
                             <div class="families-controls">
                                 <input type="text" id="settings-families-cat-search" placeholder="Buscar en esta familia..." class="input-search">
-                                <label class="families-filter">
-                                    <input type="checkbox" id="settings-families-only-overrides">
-                                    <span>Solo modificadas</span>
-                                </label>
                             </div>
                             <div id="settings-categories-list" class="family-cat-chips">
                                 <div class="empty-msg">Selecciona una familia arriba para editar sus categorias.</div>
@@ -783,6 +779,7 @@
                         <div class="segmented" id="dd-groupby" title="Agrupar por">
                             <button type="button" class="segmented-btn active" data-groupby="cat">Categoría</button>
                             <button type="button" class="segmented-btn" data-groupby="sup">Supercategoría</button>
+                            <button type="button" class="segmented-btn" data-groupby="fam">Familia</button>
                         </div>
                         <button type="button" class="icon-btn" id="dd-axis-swap" title="Intercambiar ejes (tiendas ↔ grupo)">
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3 L4 7 L8 11"/><path d="M4 7 H20"/><path d="M16 21 L20 17 L16 13"/><path d="M20 17 H4"/></svg>
@@ -799,6 +796,20 @@
                                     <span>Seleccionar todas</span>
                                 </label>
                                 <div class="multi-select-list" id="dd-sup-list"></div>
+                            </div>
+                        </div>
+                        <div class="multi-select dd-groupby-fam" data-key="families">
+                            <button type="button" class="multi-select-trigger" id="dd-fam-trigger">
+                                <span class="multi-select-label">Familias</span>
+                                <span class="multi-select-count" id="dd-fam-count">--</span>
+                                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                            </button>
+                            <div class="multi-select-panel" id="dd-fam-panel">
+                                <label class="multi-select-all">
+                                    <input type="checkbox" id="dd-fam-all">
+                                    <span>Seleccionar todas</span>
+                                </label>
+                                <div class="multi-select-list" id="dd-fam-list"></div>
                             </div>
                         </div>
                         <div class="multi-select dd-groupby-cat" data-key="categories">

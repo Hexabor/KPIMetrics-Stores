@@ -48,6 +48,7 @@ const App = (() => {
             // Category -> Supercategory mapping (non-blocking: if it fails,
             // every category falls back to "Sin mapear")
             loadSupercategoryMapping().catch(e => console.warn('Supercat mapping load failed:', e));
+            loadFamilyMapping().catch(e => console.warn('Family mapping load failed:', e));
         } catch (e) {
             console.error('Init settings error (non-fatal):', e);
         }
@@ -682,83 +683,78 @@ const App = (() => {
     ];
     function metricFiltersEcom(key) { return !!ECOM_CONFIG[key]; }
 
-    // Category -> Supercategory ("familia"). Capas:
-    //   - Factory: data/categories-supercategories.json (set canonico inmutable).
-    //   - User: setting `categoryFamilies` en Dexie. Estructura:
-    //       {
-    //         families: null | string[],          // null => usa factory tal cual
-    //         removedFamilies: string[],          // familias factory ocultadas (no se borra el JSON)
-    //         categoryOverrides: { cat: family }  // null/'' => 'Sin mapear'
-    //       }
-    //   - Runtime: SUPERCATEGORY_LIST y CATEGORY_SUPERCATEGORY se fusionan a partir
-    //     de las dos capas. Cualquier categoria sin asignar cae en 'Sin mapear'.
-    const CATEGORY_SUPERCATEGORY = {};        // { category: supercategory } (fusionado)
-    let SUPERCATEGORY_LIST = [];               // lista visible (factory + custom - removedFamilies)
+    // === Supercategorias (factory-only, inmutables) ===
+    // Vienen del JSON estatico data/categories-supercategories.json y no se
+    // pueden editar. Las familias (definidas mas abajo) son la clasificacion
+    // editable y paralela.
+    const CATEGORY_SUPERCATEGORY = {};   // { category: supercategory }
+    let SUPERCATEGORY_LIST = [];          // declared order from the JSON
     const UNMAPPED_SUPER = 'Sin mapear';
-    let factoryFamiliesMapping = null;         // raw JSON factory
-    let factoryFamiliesList = null;
-    let supercategoryLoadPromise = null;       // memoized loader
-
+    let supercategoryLoadPromise = null;
     function loadSupercategoryMapping() {
         if (supercategoryLoadPromise) return supercategoryLoadPromise;
         supercategoryLoadPromise = (async () => {
-            if (!factoryFamiliesMapping) {
-                const res = await fetch('data/categories-supercategories.json', { cache: 'no-cache' });
-                if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                const data = await res.json();
-                factoryFamiliesMapping = (data && data.mapping && typeof data.mapping === 'object') ? data.mapping : {};
-                factoryFamiliesList = Array.isArray(data.supercategories)
-                    ? data.supercategories.slice()
-                    : [...new Set(Object.values(factoryFamiliesMapping))];
-            }
-            const overrides = (await Database.getSetting('categoryFamilies')) || {};
-            const removed = new Set(Array.isArray(overrides.removedFamilies) ? overrides.removedFamilies : []);
-            const userMap = (overrides.categoryOverrides && typeof overrides.categoryOverrides === 'object') ? overrides.categoryOverrides : {};
-
-            // Lista visible: si el usuario definio una lista, esa gana (ya excluye
-            // los factory removidos por elision). Si no, usamos la de fabrica menos
-            // las que el usuario ha ocultado.
-            if (Array.isArray(overrides.families)) {
-                SUPERCATEGORY_LIST = overrides.families.slice();
-            } else {
-                SUPERCATEGORY_LIST = factoryFamiliesList.filter(f => !removed.has(f));
-            }
-
-            // Mapping fusionado: factory base, overrides ganan. Si el override
-            // apunta a una familia que ya no existe (borrada), cae a Sin mapear
-            // (el getter ya hace ese filtro al consultar).
-            for (const k of Object.keys(CATEGORY_SUPERCATEGORY)) delete CATEGORY_SUPERCATEGORY[k];
-            for (const [cat, sup] of Object.entries(factoryFamiliesMapping)) {
-                CATEGORY_SUPERCATEGORY[cat] = sup;
-            }
-            for (const [cat, sup] of Object.entries(userMap)) {
-                if (sup === null || sup === '') {
-                    // Override explicito a Sin mapear: borramos cualquier mapping
-                    // previo para que el getter devuelva UNMAPPED_SUPER.
-                    delete CATEGORY_SUPERCATEGORY[cat];
-                } else {
+            const res = await fetch('data/categories-supercategories.json', { cache: 'no-cache' });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (data && data.mapping && typeof data.mapping === 'object') {
+                for (const [cat, sup] of Object.entries(data.mapping)) {
                     CATEGORY_SUPERCATEGORY[cat] = sup;
                 }
             }
+            if (Array.isArray(data.supercategories)) {
+                SUPERCATEGORY_LIST = data.supercategories.slice();
+            } else {
+                SUPERCATEGORY_LIST = [...new Set(Object.values(CATEGORY_SUPERCATEGORY))];
+            }
         })();
-        // Clear promise on failure so a later caller can retry.
         supercategoryLoadPromise.catch(() => { supercategoryLoadPromise = null; });
         return supercategoryLoadPromise;
     }
-
-    // Fuerza recarga del mapping fusionado (tras editar overrides).
-    function invalidateSupercategoryCache() {
-        supercategoryLoadPromise = null;
-    }
-
     function getSupercategory(category) {
         if (!category) return UNMAPPED_SUPER;
-        const fam = CATEGORY_SUPERCATEGORY[category];
-        if (!fam) return UNMAPPED_SUPER;
-        // Si la familia que tiene asignada ya no esta en la lista visible
-        // (borrada por el usuario), tratamos como Sin mapear.
-        if (!SUPERCATEGORY_LIST.includes(fam)) return UNMAPPED_SUPER;
-        return fam;
+        return CATEGORY_SUPERCATEGORY[category] || UNMAPPED_SUPER;
+    }
+
+    // === Familias (clasificacion paralela del usuario, editable) ===
+    // Setting `categoryFamilies` en Dexie con forma:
+    //   { families: string[], assignments: { cat: famName } }
+    // No hay factory: la lista de familias y la asignacion son enteramente
+    // del usuario. Una categoria sin entry en assignments queda como
+    // UNMAPPED_FAMILY ("Sin familia"). Si una assignment apunta a una familia
+    // ya borrada de families, tambien cae a Sin familia.
+    const CATEGORY_FAMILY = {};          // { category: familyName }
+    let FAMILY_LIST = [];                 // orden user-defined
+    const UNMAPPED_FAMILY = 'Sin familia';
+    let familyLoadPromise = null;
+
+    function loadFamilyMapping() {
+        if (familyLoadPromise) return familyLoadPromise;
+        familyLoadPromise = (async () => {
+            for (const k of Object.keys(CATEGORY_FAMILY)) delete CATEGORY_FAMILY[k];
+            FAMILY_LIST = [];
+            const setting = (await Database.getSetting('categoryFamilies')) || {};
+            if (Array.isArray(setting.families)) FAMILY_LIST = setting.families.slice();
+            if (setting.assignments && typeof setting.assignments === 'object') {
+                for (const [cat, fam] of Object.entries(setting.assignments)) {
+                    if (typeof fam === 'string' && fam) CATEGORY_FAMILY[cat] = fam;
+                }
+            }
+        })();
+        familyLoadPromise.catch(() => { familyLoadPromise = null; });
+        return familyLoadPromise;
+    }
+
+    function invalidateFamilyCache() {
+        familyLoadPromise = null;
+    }
+
+    function getFamily(category) {
+        if (!category) return UNMAPPED_FAMILY;
+        const f = CATEGORY_FAMILY[category];
+        if (!f) return UNMAPPED_FAMILY;
+        if (!FAMILY_LIST.includes(f)) return UNMAPPED_FAMILY;
+        return f;
     }
 
     // ============================
@@ -1242,20 +1238,23 @@ const App = (() => {
     let ddState = {
         sortCol: null,
         sortDir: 'desc',
-        groupBy: 'cat',        // 'cat' | 'sup' — columns (or rows, when swapped) level
+        groupBy: 'cat',        // 'cat' | 'sup' | 'fam'
         axisMode: 'store-rows',// 'store-rows' | 'group-rows'
         configLoaded: false,
         visibleCats: null,     // Set<string> of selected categories; null = "all" fallback
         visibleStores: null,   // Set<string>
-        visibleSupers: null,   // Set<string> of selected supercategories; null = "all" fallback
-        catsTouched: false,    // user manually altered category selection
+        visibleSupers: null,   // Set<string> of selected supercategories
+        visibleFams: null,     // Set<string> of selected families (user-defined)
+        catsTouched: false,
         storesTouched: false,
         supersTouched: false,
-        allCats: [],           // full list seen last render (for the panel UI)
+        famsTouched: false,
+        allCats: [],
         allStores: [],
         allSupers: [],
-        lastAutoMetric: null,  // metric used to compute default top 5 last time
-        lastAutoRange: null    // "weekFrom-weekTo-groupBy-axis" key for default recompute check
+        allFams: [],
+        lastAutoMetric: null,
+        lastAutoRange: null
     };
 
     async function refreshEvolution() {
@@ -2771,9 +2770,16 @@ const App = (() => {
     }
 
     async function setCategoryFamiliesSetting(obj) {
-        await Database.setSetting('categoryFamilies', obj || {});
-        invalidateSupercategoryCache();
-        await loadSupercategoryMapping();
+        // Modelo limpio: { families: string[], assignments: { cat: famName } }.
+        // Si vienen propiedades del modelo viejo (removedFamilies, categoryOverrides),
+        // se descartan silenciosamente al persistir.
+        const clean = {
+            families: Array.isArray(obj && obj.families) ? obj.families.slice() : [],
+            assignments: (obj && obj.assignments && typeof obj.assignments === 'object') ? { ...obj.assignments } : {}
+        };
+        await Database.setSetting('categoryFamilies', clean);
+        invalidateFamilyCache();
+        await loadFamilyMapping();
     }
 
     // Solo refresca Vista detalle si esta visible — si el usuario esta en
@@ -2784,22 +2790,14 @@ const App = (() => {
         if (sec && !sec.classList.contains('hidden')) refreshDashDetail();
     }
 
-    // Resuelve a que familia efectiva pertenece una categoria (override > factory > Sin mapear).
-    function getEffectiveFamily(cat, overrides) {
-        const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
-        if (Object.prototype.hasOwnProperty.call(overrides, cat)) {
-            const v = overrides[cat];
-            return v || '';   // '' => Sin mapear
-        }
-        return factoryVal;
-    }
-
-    // Devuelve el set completo de categorias conocidas: factory + overrides + las
-    // que aparecen en operations (por si hay alguna que el JSON no contemplara).
-    async function getKnownCategories(overrides) {
+    // Devuelve el set completo de categorias conocidas: factory (de
+    // supercategorias) + las que aparecen en operations + las que ya tienen
+    // assignment de familia. Sin duplicar.
+    async function getKnownCategories() {
+        await loadSupercategoryMapping();
         const set = new Set([
-            ...Object.keys(factoryFamiliesMapping || {}),
-            ...Object.keys(overrides || {})
+            ...Object.keys(CATEGORY_SUPERCATEGORY),
+            ...Object.keys(CATEGORY_FAMILY)
         ]);
         try {
             const ops = await Database.getAllOperations();
@@ -2813,71 +2811,45 @@ const App = (() => {
         const catsList = document.getElementById('settings-categories-list');
         if (!familiesList || !catsList) return;
 
-        await loadSupercategoryMapping();
-        const setting = await getCategoryFamiliesSetting();
-        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
-        const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? setting.categoryOverrides : {};
-        const factoryList = factoryFamiliesList || [];
-
-        // Familias visibles (factory no ocultas + custom). Para conteos usamos
-        // todas las categorias conocidas y a que familia caen efectivamente.
-        const customFamilies = SUPERCATEGORY_LIST.filter(f => !factoryList.includes(f));
-        const allFamilyEntries = [
-            ...factoryList.map(name => ({ name, origin: 'factory', visible: !removed.has(name) })),
-            ...customFamilies.map(name => ({ name, origin: 'custom', visible: true }))
-        ];
-
-        const allCats = await getKnownCategories(overrides);
+        await loadFamilyMapping();
+        const allCats = await getKnownCategories();
         const countByFamily = new Map();
         for (const cat of allCats) {
-            const fam = getEffectiveFamily(cat, overrides);
-            // Si la familia efectiva esta oculta o no existe, cuenta como Sin mapear.
-            const fkey = (fam && SUPERCATEGORY_LIST.includes(fam)) ? fam : FAM_UNMAPPED;
-            countByFamily.set(fkey, (countByFamily.get(fkey) || 0) + 1);
+            const fam = getFamily(cat);   // devuelve UNMAPPED_FAMILY si no tiene
+            countByFamily.set(fam, (countByFamily.get(fam) || 0) + 1);
         }
 
-        // Default de familia activa: la primera familia visible con categorias,
-        // o Sin mapear si no hay ninguna asignacion aun.
+        // Default de familia activa: la primera con categorias, o Sin familia
+        // si no hay ninguna creada todavia / ninguna con miembros.
         if (!settingsFamiliesState.activeFamily ||
             (settingsFamiliesState.activeFamily !== FAM_UNMAPPED &&
-                !SUPERCATEGORY_LIST.includes(settingsFamiliesState.activeFamily))) {
-            const firstWithCats = allFamilyEntries.find(f => f.visible && (countByFamily.get(f.name) || 0) > 0);
-            settingsFamiliesState.activeFamily = firstWithCats ? firstWithCats.name : FAM_UNMAPPED;
+                !FAMILY_LIST.includes(settingsFamiliesState.activeFamily))) {
+            const firstWithCats = FAMILY_LIST.find(f => (countByFamily.get(f) || 0) > 0);
+            settingsFamiliesState.activeFamily = firstWithCats || FAMILY_LIST[0] || FAM_UNMAPPED;
         }
         const active = settingsFamiliesState.activeFamily;
 
-        // === Chips de familias ===
-        if (!allFamilyEntries.length) {
-            familiesList.innerHTML = '<div class="store-groups-empty">El JSON de familias no se cargo. Revisa data/categories-supercategories.json.</div>';
+        // === Chips de familias (solo las del usuario; sin badges factory/custom) ===
+        if (!FAMILY_LIST.length) {
+            familiesList.innerHTML = '<div class="store-groups-empty">Todavia no hay familias. Crea la primera con el campo de abajo. Tip: las familias son una clasificacion paralela a las supercategorias (las supercategorias vienen fijas del catalogo CeX; las familias las defines tu como te convenga para los analisis).</div>';
         } else {
-            const chips = allFamilyEntries.map(f => {
-                const count = countByFamily.get(f.name) || 0;
-                const badge = f.origin === 'factory'
-                    ? `<span class="family-badge family-badge-factory" title="Definida en data/categories-supercategories.json">Fabrica</span>`
-                    : `<span class="family-badge family-badge-custom" title="Familia anadida por el usuario">Custom</span>`;
-                const hiddenCls = f.visible ? '' : ' family-hidden';
-                const activeCls = f.visible && active === f.name ? ' family-chip-active' : '';
-                const action = f.visible
-                    ? `<button type="button" class="family-btn family-btn-danger" data-fam-action="hide" data-fam="${escapeHtml(f.name)}" data-origin="${f.origin}" title="${f.origin === 'factory' ? 'Ocultar familia (sus categorias caen a Sin mapear hasta restaurar)' : 'Eliminar familia (sus categorias caen a Sin mapear)'}">${f.origin === 'factory' ? 'Ocultar' : 'Eliminar'}</button>`
-                    : `<button type="button" class="family-btn" data-fam-action="restore" data-fam="${escapeHtml(f.name)}" title="Restaurar familia">Restaurar</button>`;
-                const select = f.visible
-                    ? `<button type="button" class="family-chip-select" data-fam-select="${escapeHtml(f.name)}" title="Editar categorias de esta familia">
-                        <span class="family-name">${escapeHtml(f.name)}</span>
+            const chips = FAMILY_LIST.map(name => {
+                const count = countByFamily.get(name) || 0;
+                const activeCls = active === name ? ' family-chip-active' : '';
+                return `<div class="family-chip${activeCls}">
+                    <button type="button" class="family-chip-select" data-fam-select="${escapeHtml(name)}" title="Editar categorias de esta familia">
+                        <span class="family-name">${escapeHtml(name)}</span>
                         <span class="family-chip-count">${count}</span>
-                    </button>`
-                    : `<span class="family-chip-select"><span class="family-name">${escapeHtml(f.name)}</span></span>`;
-                return `<div class="family-chip${hiddenCls}${activeCls}">
-                    ${select}
-                    ${badge}
-                    ${action}
+                    </button>
+                    <button type="button" class="family-btn family-btn-danger" data-fam-action="delete" data-fam="${escapeHtml(name)}" title="Eliminar familia (sus categorias quedan sin familia)">Eliminar</button>
                 </div>`;
             }).join('');
 
             const unmappedCount = countByFamily.get(FAM_UNMAPPED) || 0;
             const unmappedActive = active === FAM_UNMAPPED ? ' family-chip-active' : '';
             const unmappedChip = `<div class="family-chip family-chip-unmapped${unmappedActive}">
-                <button type="button" class="family-chip-select" data-fam-select="${FAM_UNMAPPED}" title="Categorias actualmente sin familia asignada">
-                    <span class="family-name">Sin mapear</span>
+                <button type="button" class="family-chip-select" data-fam-select="${FAM_UNMAPPED}" title="Categorias sin familia asignada">
+                    <span class="family-name">Sin familia</span>
                     <span class="family-chip-count">${unmappedCount}</span>
                 </button>
             </div>`;
@@ -2885,98 +2857,65 @@ const App = (() => {
             familiesList.innerHTML = chips + unmappedChip;
         }
 
-        // === Editor de la familia activa ===
-        renderFamilyEditor(active, allCats, overrides);
-
+        renderFamilyEditor(active, allCats);
         bindSettingsFamiliesHandlers();
     }
 
-    function renderFamilyEditor(active, allCats, overrides) {
+    // Constante sentinel (compartida con la UI antigua) — la "Sin familia"
+    // ahora; el nombre FAM_UNMAPPED se mantiene en el codigo por compatibilidad.
+    const FAM_UNMAPPED_LABEL = 'Sin familia';
+
+    function renderFamilyEditor(active, allCats) {
         const title = document.getElementById('settings-family-editor-title');
         const meta = document.getElementById('settings-family-editor-meta');
         const chips = document.getElementById('settings-categories-list');
         const addRow = document.getElementById('settings-family-add-row');
         const addSelect = document.getElementById('settings-family-add-select');
-
-        if (!title || !chips) return;
+        if (!title || !chips || !addRow || !addSelect) return;
 
         const isUnmapped = active === FAM_UNMAPPED;
-        const visibleFamilies = SUPERCATEGORY_LIST.slice();
-
-        // Categorias asignadas a la familia activa (las que su familia efectiva
-        // es 'active', o Sin mapear si caen ahi por estar la familia oculta).
-        const inFamily = allCats.filter(cat => {
-            const fam = getEffectiveFamily(cat, overrides);
-            const fkey = (fam && SUPERCATEGORY_LIST.includes(fam)) ? fam : FAM_UNMAPPED;
-            return fkey === active;
-        });
+        const inFamily = allCats.filter(cat => getFamily(cat) === active);
 
         const term = settingsFamiliesState.catSearch.toLowerCase();
-        const onlyOv = settingsFamiliesState.onlyOverrides;
+        title.textContent = isUnmapped ? 'Sin familia' : (active || '');
+        meta.textContent = `${inFamily.length} categoria${inFamily.length === 1 ? '' : 's'}`;
 
-        title.textContent = isUnmapped ? 'Sin mapear' : (active || '');
-        meta.textContent = `${inFamily.length} categoria${inFamily.length === 1 ? '' : 's'}` + (isUnmapped ? ' sin familia' : '');
-
-        const filtered = inFamily.filter(cat => {
-            if (term && !cat.toLowerCase().includes(term)) return false;
-            const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
-            const isOverride = Object.prototype.hasOwnProperty.call(overrides, cat) &&
-                               (overrides[cat] || '') !== factoryVal;
-            if (onlyOv && !isOverride) return false;
-            return true;
-        });
+        const filtered = inFamily.filter(cat => !term || cat.toLowerCase().includes(term));
 
         if (!filtered.length) {
             chips.innerHTML = `<div class="empty-msg">${inFamily.length === 0
-                ? (isUnmapped ? 'No hay categorias sin asignar.' : 'Esta familia no tiene categorias todavia. Anade alguna desde el selector de abajo.')
-                : 'Sin coincidencias con los filtros actuales.'}</div>`;
+                ? (isUnmapped ? 'Todas las categorias estan asignadas a alguna familia. ¡Bien hecho!' : 'Esta familia no tiene categorias todavia. Anadelas con el selector de abajo o desde otra familia con "Mover a...".')
+                : 'Sin coincidencias con la busqueda.'}</div>`;
         } else {
             chips.innerHTML = filtered.map(cat => {
-                const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
-                const overrideVal = Object.prototype.hasOwnProperty.call(overrides, cat) ? (overrides[cat] || '') : null;
-                const isOverride = overrideVal !== null && overrideVal !== factoryVal;
-                const badge = isOverride
-                    ? `<span class="family-badge family-badge-modified" title="Asignacion cambiada por el usuario respecto a la fabrica (factory: ${escapeHtml(factoryVal || 'Sin mapear')})">Modificada</span>`
-                    : '';
-                // En Sin mapear el chip lleva un selector para asignar familia.
-                // En una familia normal el chip lleva un selector para mover
-                // (incluyendo "Sin mapear") + restaurar a fabrica si es override.
+                // Selector para mover: incluye Sin familia + las demas familias.
                 const moveOpts = ['<option value="" disabled selected>Mover a...</option>',
-                    `<option value="${FAM_UNMAPPED}">Sin mapear</option>`,
-                    ...visibleFamilies.filter(f => f !== active).map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`)
+                    `<option value="${FAM_UNMAPPED}">${FAM_UNMAPPED_LABEL}</option>`,
+                    ...FAMILY_LIST.filter(f => f !== active).map(f => `<option value="${escapeHtml(f)}">${escapeHtml(f)}</option>`)
                 ].join('');
-                const restoreBtn = isOverride
-                    ? `<button type="button" class="cat-chip-btn" data-cat-action="restore" data-cat="${escapeHtml(cat)}" title="Restaurar a fabrica (${escapeHtml(factoryVal || 'Sin mapear')})">↺</button>`
-                    : '';
                 return `<span class="cat-chip" data-cat="${escapeHtml(cat)}">
                     <span class="cat-chip-name">${escapeHtml(cat)}</span>
-                    ${badge}
                     <select class="cat-chip-move" data-cat-move="${escapeHtml(cat)}" title="Mover esta categoria a otra familia">${moveOpts}</select>
-                    ${restoreBtn}
                 </span>`;
             }).join('');
         }
 
-        // Selector "Añadir categoria": solo tiene sentido en familias reales,
-        // no en Sin mapear (donde "añadir" significaria quitar de su familia
-        // actual, mejor hacerlo desde esa familia con "Mover a... Sin mapear").
-        if (isUnmapped) {
+        // Selector "Añadir categoria": solo en familias reales (no en Sin familia).
+        if (isUnmapped || !FAMILY_LIST.length) {
             addRow.classList.add('hidden');
         } else {
             addRow.classList.remove('hidden');
-            // Candidatas: todas las que NO estan ya en la familia activa.
             const candidates = allCats.filter(cat => !inFamily.includes(cat));
-            // Agrupar por familia actual (Sin mapear primero, luego cada otra familia).
             const groups = new Map();
             groups.set(FAM_UNMAPPED, []);
-            for (const fam of visibleFamilies) if (fam !== active) groups.set(fam, []);
+            for (const fam of FAMILY_LIST) if (fam !== active) groups.set(fam, []);
             for (const cat of candidates) {
-                const fam = getEffectiveFamily(cat, overrides);
-                const fkey = (fam && SUPERCATEGORY_LIST.includes(fam) && fam !== active) ? fam : FAM_UNMAPPED;
+                const fam = getFamily(cat);
+                const fkey = (fam !== UNMAPPED_FAMILY && FAMILY_LIST.includes(fam) && fam !== active) ? fam : FAM_UNMAPPED;
                 if (!groups.has(fkey)) groups.set(fkey, []);
                 groups.get(fkey).push(cat);
             }
-            const groupLabel = (key) => key === FAM_UNMAPPED ? 'Sin mapear' : key;
+            const groupLabel = (key) => key === FAM_UNMAPPED ? FAM_UNMAPPED_LABEL : key;
             let optsHtml = '<option value="">+ Anadir categoria...</option>';
             for (const [key, cats] of groups.entries()) {
                 if (!cats.length) continue;
@@ -2995,7 +2934,6 @@ const App = (() => {
         const addBtn = document.getElementById('btn-settings-family-add');
         const addInput = document.getElementById('settings-family-new-name');
         const searchInput = document.getElementById('settings-families-cat-search');
-        const onlyOv = document.getElementById('settings-families-only-overrides');
         const addSelect = document.getElementById('settings-family-add-select');
 
         if (addBtn && !addBtn.dataset.bound) {
@@ -3003,17 +2941,11 @@ const App = (() => {
             addBtn.addEventListener('click', async () => {
                 const name = (addInput.value || '').trim();
                 if (!name) return;
-                if (SUPERCATEGORY_LIST.includes(name)) { alert('Ya existe una familia con ese nombre.'); return; }
+                if (FAMILY_LIST.includes(name)) { alert('Ya existe una familia con ese nombre.'); return; }
                 const setting = await getCategoryFamiliesSetting();
-                const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
-                if (removed.has(name)) {
-                    removed.delete(name);
-                    setting.removedFamilies = [...removed];
-                } else {
-                    const list = Array.isArray(setting.families) ? setting.families.slice() : SUPERCATEGORY_LIST.slice();
-                    if (!list.includes(name)) list.push(name);
-                    setting.families = list;
-                }
+                const families = Array.isArray(setting.families) ? setting.families.slice() : [];
+                families.push(name);
+                setting.families = families;
                 await setCategoryFamiliesSetting(setting);
                 addInput.value = '';
                 settingsFamiliesState.activeFamily = name;
@@ -3030,52 +2962,32 @@ const App = (() => {
                 await renderSettingsFamilies();
             }, 200));
         }
-        if (onlyOv && !onlyOv.dataset.bound) {
-            onlyOv.dataset.bound = '1';
-            onlyOv.addEventListener('change', async () => {
-                settingsFamiliesState.onlyOverrides = !!onlyOv.checked;
-                await renderSettingsFamilies();
-            });
-        }
 
         if (familiesList) {
-            // Click en el chip de familia (no en los botones de accion) → activarla.
             familiesList.querySelectorAll('button[data-fam-select]').forEach(btn => {
                 btn.addEventListener('click', async () => {
                     settingsFamiliesState.activeFamily = btn.dataset.famSelect;
                     await renderSettingsFamilies();
                 });
             });
-            familiesList.querySelectorAll('button[data-fam-action]').forEach(btn => {
+            familiesList.querySelectorAll('button[data-fam-action="delete"]').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     const name = btn.dataset.fam;
-                    const origin = btn.dataset.origin;
-                    const action = btn.dataset.famAction;
+                    const count = Object.values(CATEGORY_FAMILY).filter(f => f === name).length;
+                    const msg = count > 0
+                        ? `Eliminar la familia "${name}"? Las ${count} categorias asignadas quedaran sin familia.`
+                        : `Eliminar la familia "${name}"?`;
+                    if (!confirm(msg)) return;
                     const setting = await getCategoryFamiliesSetting();
-                    if (action === 'hide' && origin === 'factory') {
-                        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
-                        removed.add(name);
-                        setting.removedFamilies = [...removed];
-                        if (Array.isArray(setting.families)) {
-                            setting.families = setting.families.filter(f => f !== name);
-                        }
-                    } else if (action === 'hide' && origin === 'custom') {
-                        if (Array.isArray(setting.families)) {
-                            setting.families = setting.families.filter(f => f !== name);
-                        }
-                    } else if (action === 'restore') {
-                        const removed = new Set(Array.isArray(setting.removedFamilies) ? setting.removedFamilies : []);
-                        removed.delete(name);
-                        setting.removedFamilies = [...removed];
-                        if (Array.isArray(setting.families) && !setting.families.includes(name)) {
-                            setting.families.push(name);
+                    setting.families = (Array.isArray(setting.families) ? setting.families : []).filter(f => f !== name);
+                    // Limpiar assignments que apuntaban a esta familia.
+                    if (setting.assignments) {
+                        for (const cat of Object.keys(setting.assignments)) {
+                            if (setting.assignments[cat] === name) delete setting.assignments[cat];
                         }
                     }
-                    // Si la familia activa desaparece, caera al default en el siguiente render.
-                    if (settingsFamiliesState.activeFamily === name && (action === 'hide')) {
-                        settingsFamiliesState.activeFamily = null;
-                    }
+                    if (settingsFamiliesState.activeFamily === name) settingsFamiliesState.activeFamily = null;
                     await setCategoryFamiliesSetting(setting);
                     await renderSettingsFamilies();
                     refreshDashDetailIfVisible();
@@ -3084,26 +2996,12 @@ const App = (() => {
         }
 
         if (catsList) {
-            // Move chip → otra familia o Sin mapear.
             catsList.querySelectorAll('select[data-cat-move]').forEach(sel => {
                 sel.addEventListener('change', async () => {
                     const cat = sel.dataset.catMove;
                     const target = sel.value;
                     if (!target) return;
-                    await reassignCategory(cat, target === FAM_UNMAPPED ? '' : target);
-                });
-            });
-            catsList.querySelectorAll('button[data-cat-action]').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    if (btn.dataset.catAction !== 'restore') return;
-                    const cat = btn.dataset.cat;
-                    const setting = await getCategoryFamiliesSetting();
-                    const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? { ...setting.categoryOverrides } : {};
-                    delete overrides[cat];
-                    setting.categoryOverrides = overrides;
-                    await setCategoryFamiliesSetting(setting);
-                    await renderSettingsFamilies();
-                    refreshDashDetailIfVisible();
+                    await assignCategoryToFamily(cat, target === FAM_UNMAPPED ? '' : target);
                 });
             });
         }
@@ -3115,23 +3013,18 @@ const App = (() => {
                 if (!cat) return;
                 const target = settingsFamiliesState.activeFamily;
                 if (!target || target === FAM_UNMAPPED) return;
-                await reassignCategory(cat, target);
+                await assignCategoryToFamily(cat, target);
             });
         }
     }
 
-    // Asigna una categoria a una familia (o Sin mapear si family es '').
-    // Si la asignacion coincide con factory, eliminamos el override.
-    async function reassignCategory(cat, family) {
+    // Asigna una categoria a una familia (o vacio = sin familia).
+    async function assignCategoryToFamily(cat, family) {
         const setting = await getCategoryFamiliesSetting();
-        const overrides = (setting.categoryOverrides && typeof setting.categoryOverrides === 'object') ? { ...setting.categoryOverrides } : {};
-        const factoryVal = (factoryFamiliesMapping && factoryFamiliesMapping[cat]) || '';
-        if ((family || '') === factoryVal) {
-            delete overrides[cat];
-        } else {
-            overrides[cat] = family;
-        }
-        setting.categoryOverrides = overrides;
+        const assignments = (setting.assignments && typeof setting.assignments === 'object') ? { ...setting.assignments } : {};
+        if (!family) delete assignments[cat];
+        else assignments[cat] = family;
+        setting.assignments = assignments;
         await setCategoryFamiliesSetting(setting);
         await renderSettingsFamilies();
         refreshDashDetailIfVisible();
@@ -3696,6 +3589,7 @@ const App = (() => {
             { trigger: 'dd-cat-trigger', panel: 'dd-cat-panel' },
             { trigger: 'dd-store-trigger', panel: 'dd-store-panel' },
             { trigger: 'dd-sup-trigger', panel: 'dd-sup-panel' },
+            { trigger: 'dd-fam-trigger', panel: 'dd-fam-panel' },
             { trigger: 'dg-store-trigger', panel: 'dg-store-panel' }
         ];
         cfg.forEach(({ trigger, panel }) => {
@@ -3742,6 +3636,14 @@ const App = (() => {
             ddState.supersTouched = true;
             // Supers change invalidates the category selection: let the default
             // top-5 logic recompute within the new scope.
+            ddState.catsTouched = false;
+            ddState.lastAutoMetric = null;
+            refreshDashDetail();
+        });
+        document.getElementById('dd-fam-all').addEventListener('change', (e) => {
+            if (e.target.checked) ddState.visibleFams = new Set(ddState.allFams);
+            else ddState.visibleFams = new Set();
+            ddState.famsTouched = true;
             ddState.catsTouched = false;
             ddState.lastAutoMetric = null;
             refreshDashDetail();
@@ -3809,6 +3711,18 @@ const App = (() => {
                 refreshDashDetail();
             }
         });
+        document.getElementById('dd-fam-list').addEventListener('change', (e) => {
+            if (e.target.matches('input[type="checkbox"]')) {
+                const value = e.target.dataset.value;
+                if (!ddState.visibleFams) ddState.visibleFams = new Set();
+                if (e.target.checked) ddState.visibleFams.add(value);
+                else ddState.visibleFams.delete(value);
+                ddState.famsTouched = true;
+                ddState.catsTouched = false;
+                ddState.lastAutoMetric = null;
+                refreshDashDetail();
+            }
+        });
     }
 
     function renderMultiSelectList(listId, items, selectedSet, searchTerm, kind) {
@@ -3843,6 +3757,10 @@ const App = (() => {
             listId = 'dd-sup-list'; countId = 'dd-sup-count';
             searchId = null; allCbId = 'dd-sup-all';
             items = ddState.allSupers; selected = ddState.visibleSupers;
+        } else if (kind === 'fam') {
+            listId = 'dd-fam-list'; countId = 'dd-fam-count';
+            searchId = null; allCbId = 'dd-fam-all';
+            items = ddState.allFams; selected = ddState.visibleFams;
         } else {
             listId = 'dd-store-list'; countId = 'dd-store-count';
             searchId = 'dd-store-search'; allCbId = 'dd-store-all';
@@ -3879,9 +3797,11 @@ const App = (() => {
         ddState.visibleCats = null;
         ddState.visibleStores = null;
         ddState.visibleSupers = null;
+        ddState.visibleFams = null;
         ddState.catsTouched = false;
         ddState.storesTouched = false;
         ddState.supersTouched = false;
+        ddState.famsTouched = false;
         ddState.lastAutoMetric = null;
         ddState.lastAutoRange = null;
         // Keep groupBy / axisMode across data reloads; they're user preferences.
@@ -4083,7 +4003,7 @@ const App = (() => {
         if (ddState.configLoaded) return;
         const gb = await Database.getSetting('ddGroupBy');
         const ax = await Database.getSetting('ddAxisMode');
-        if (gb === 'cat' || gb === 'sup') ddState.groupBy = gb;
+        if (gb === 'cat' || gb === 'sup' || gb === 'fam') ddState.groupBy = gb;
         if (ax === 'store-rows' || ax === 'group-rows') ddState.axisMode = ax;
         ddState.configLoaded = true;
     }
@@ -4096,8 +4016,10 @@ const App = (() => {
         // Multi-select visibility (the one matching groupBy is shown)
         const catWrap = document.querySelector('.multi-select.dd-groupby-cat');
         const supWrap = document.querySelector('.multi-select.dd-groupby-sup');
+        const famWrap = document.querySelector('.multi-select.dd-groupby-fam');
         if (catWrap) catWrap.classList.toggle('hidden', ddState.groupBy !== 'cat');
         if (supWrap) supWrap.classList.toggle('hidden', ddState.groupBy !== 'sup');
+        if (famWrap) famWrap.classList.toggle('hidden', ddState.groupBy !== 'fam');
 
         // Swap button visual state
         const swapBtn = document.getElementById('dd-axis-swap');
@@ -4113,7 +4035,7 @@ const App = (() => {
             const btn = e.target.closest('.segmented-btn');
             if (!btn) return;
             const val = btn.dataset.groupby;
-            if (val !== 'cat' && val !== 'sup') return;
+            if (val !== 'cat' && val !== 'sup' && val !== 'fam') return;
             if (ddState.groupBy === val) return;
             ddState.groupBy = val;
             // Changing granularity invalidates the auto-top-5 recompute key
@@ -4396,8 +4318,9 @@ const App = (() => {
     }
 
     async function refreshDashDetail() {
-        // Ensure supercat mapping + persisted prefs + shared store groups are loaded before render.
+        // Ensure supercat mapping + family mapping + persisted prefs + shared store groups are loaded before render.
         try { await loadSupercategoryMapping(); } catch (e) { /* no-op */ }
+        try { await loadFamilyMapping(); } catch (e) { /* no-op */ }
         await loadDashDetailConfig();
         await loadStoreGroups();
         updateDashDetailControlsUI();
@@ -4430,7 +4353,9 @@ const App = (() => {
         const titleEl = document.getElementById('dd-panel-title');
 
         // Dynamic panel title
-        const groupLabel = ddState.groupBy === 'sup' ? 'Supercategoría' : 'Categoría';
+        const groupLabel = ddState.groupBy === 'sup' ? 'Supercategoría'
+            : ddState.groupBy === 'fam' ? 'Familia'
+            : 'Categoría';
         if (titleEl) {
             titleEl.textContent = ddState.axisMode === 'store-rows'
                 ? `Tiendas × ${groupLabel}`
@@ -4447,10 +4372,12 @@ const App = (() => {
         const allData = await Database.getAllOperations();
         const weekRecords = allData.filter(r => r.week >= weekFrom && r.week <= weekTo);
 
-        // Group key = category or supercategory depending on ddState.groupBy.
-        // Aggregate by (store, groupKey). Keep per-store and per-group ticket
-        // Sets for cross-dedup when rendering the Tickets metric.
-        const groupOf = (cat) => ddState.groupBy === 'sup' ? getSupercategory(cat) : cat;
+        // Group key = category | supercategory | family depending on ddState.groupBy.
+        const groupOf = (cat) => {
+            if (ddState.groupBy === 'sup') return getSupercategory(cat);
+            if (ddState.groupBy === 'fam') return getFamily(cat);
+            return cat;
+        };
         const byStoreGroup = {};
         const storeTickets = {};
         const groupTickets = {};
@@ -4507,16 +4434,30 @@ const App = (() => {
         for (const s of SUPERCATEGORY_LIST) if (supersInData.has(s)) allSupersArr.push(s);
         for (const s of supersInData) if (!allSupersArr.includes(s)) allSupersArr.push(s);
 
+        // Families present in the data (for the fam multi-select UI).
+        // Mantiene el orden user-defined de FAMILY_LIST, mas UNMAPPED_FAMILY
+        // si hay categorias sin asignar y caen ahi.
+        const famsInData = new Set();
+        for (const c of allCategories) famsInData.add(getFamily(c));
+        const allFamsArr = [];
+        for (const f of FAMILY_LIST) if (famsInData.has(f)) allFamsArr.push(f);
+        if (famsInData.has(UNMAPPED_FAMILY) && !allFamsArr.includes(UNMAPPED_FAMILY)) {
+            allFamsArr.push(UNMAPPED_FAMILY);
+        }
+
         // Groups array for the active groupBy (used as columns or rows)
         let allGroupsArr;
         if (ddState.groupBy === 'sup') {
             allGroupsArr = allSupersArr.slice();
+        } else if (ddState.groupBy === 'fam') {
+            allGroupsArr = allFamsArr.slice();
         } else {
             allGroupsArr = [...allGroupSet].sort((a, b) => a.localeCompare(b));
         }
 
         ddState.allCats = [...allCategories].sort((a, b) => a.localeCompare(b));
         ddState.allSupers = allSupersArr;
+        ddState.allFams = allFamsArr;
         ddState.allStores = allStoresArr;
 
         if (!allStoresArr.length || !allGroupsArr.length) {
@@ -4525,6 +4466,7 @@ const App = (() => {
             tbody.innerHTML = `<tr><td class="empty-msg">${msg}</td></tr>`;
             tfoot.innerHTML = '';
             updateMultiSelectUI('sup');
+            updateMultiSelectUI('fam');
             updateMultiSelectUI('cat');
             updateMultiSelectUI('store');
             const ddGroupsEmptyInst = storeGroupsInstances.find(i => i.prefix === 'dd');
@@ -4553,8 +4495,12 @@ const App = (() => {
         };
 
         // Defaults / reconciliation for the group multi-select (matches groupBy)
-        const groupStateKey = ddState.groupBy === 'sup' ? 'visibleSupers' : 'visibleCats';
-        const groupTouchedKey = ddState.groupBy === 'sup' ? 'supersTouched' : 'catsTouched';
+        const groupStateKey = ddState.groupBy === 'sup' ? 'visibleSupers'
+            : ddState.groupBy === 'fam' ? 'visibleFams'
+            : 'visibleCats';
+        const groupTouchedKey = ddState.groupBy === 'sup' ? 'supersTouched'
+            : ddState.groupBy === 'fam' ? 'famsTouched'
+            : 'catsTouched';
         const rangeKey = `${weekFrom}-${weekTo}-${excludeEcom ? 'e' : 'f'}-${ddState.groupBy}-${ddState.axisMode}`;
         const needAutoTop = !ddState[groupTouchedKey] && (
             !ddState[groupStateKey] ||
@@ -4562,8 +4508,8 @@ const App = (() => {
             ddState.lastAutoRange !== rangeKey
         );
         if (needAutoTop) {
-            if (ddState.groupBy === 'sup') {
-                // Few supers: default = all marked
+            if (ddState.groupBy === 'sup' || ddState.groupBy === 'fam') {
+                // Few groupings: default = all marked
                 ddState[groupStateKey] = new Set(allGroupsArr);
             } else {
                 // Many cats: default = top 5 by metric
@@ -4587,6 +4533,7 @@ const App = (() => {
         }
 
         updateMultiSelectUI('sup');
+        updateMultiSelectUI('fam');
         updateMultiSelectUI('cat');
         updateMultiSelectUI('store');
         const ddGroupsInst = storeGroupsInstances.find(i => i.prefix === 'dd');
