@@ -22,3 +22,6 @@ node_modules/
 schema-extract.php
 db-setup.php
 
+# Backend: credenciales y secretos (NUNCA a git, el repo es publico)
+config.php
+
