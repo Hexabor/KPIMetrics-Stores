@@ -24,4 +24,6 @@ db-setup.php
 
 # Backend: credenciales y secretos (NUNCA a git, el repo es publico)
 config.php
+# Config del frontend con el APP_SECRET (copia de js/config.example.js)
+js/config.local.js
 

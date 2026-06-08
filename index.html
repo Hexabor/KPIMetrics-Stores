@@ -7,7 +7,7 @@
     <title>KPI Metrics 2026</title>
     <link rel="icon" type="image/png" href="assets/favicon.png">
     <link rel="stylesheet" href="css/styles.css">
-    <script src="https://unpkg.com/dexie@3.2.6/dist/dexie.min.js"></script>
+    <!-- Dexie retirado en Fase 4a: el almacenamiento es MySQL via API. -->
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <!-- Pako for gzip compression of backups -->
     <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
@@ -887,6 +887,9 @@
     </div>
 
     <!-- App modules -->
+    <!-- Config local (gitignored): window.APP_CONFIG = { apiBase, appSecret }.
+         Debe cargarse ANTES de database.js. Copia js/config.example.js. -->
+    <script src="js/config.local.js"></script>
     <script src="js/changelog.js"></script>
     <script src="js/modules/database.js"></script>
     <script src="js/modules/csv-parser.js"></script>

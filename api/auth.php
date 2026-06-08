@@ -27,13 +27,25 @@ function usuarioActual() {
  * Fase 4b: AÑADIR aqui -> exigir sesion valida y usuarioActual()['role']==='admin'.
  */
 function exigirAdmin() {
+    // Fase 4a, admin de facto por dos vias (cualquiera vale):
+    //   1) Secreto compartido en cabecera X-App-Secret (lo manda el frontend
+    //      y las herramientas tipo curl/migrate).
+    //   2) Haber pasado el Basic Auth del .htaccess (el navegador reenvia las
+    //      credenciales en las peticiones same-origin). Cubre el caso de que
+    //      el secreto no llegue por config del servidor.
     $secret = $_SERVER['HTTP_X_APP_SECRET'] ?? '';
-    // hash_equals evita timing attacks al comparar secretos.
-    if (!hash_equals(APP_SECRET, $secret)) {
+    $hasSecret = APP_SECRET !== '' && hash_equals(APP_SECRET, $secret);
+    $hasBasicAuth = !empty($_SERVER['PHP_AUTH_USER'])
+        || !empty($_SERVER['REMOTE_USER'])
+        || !empty($_SERVER['REDIRECT_REMOTE_USER']);
+
+    if (!$hasSecret && !$hasBasicAuth) {
         http_response_code(403);
         header('Content-Type: application/json; charset=utf-8');
         exit(json_encode(['error' => 'forbidden']));
     }
+    // Fase 4b: sustituir "Basic Auth presente" por "sesion OAuth valida y
+    // usuarioActual()['role'] === 'admin'".
 }
 
 /**
