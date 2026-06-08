@@ -1,0 +1,16 @@
+# Deniega el acceso por navegador a la carpeta db/ (migraciones).
+# El runner migrate.php (PHP) sigue pudiendo LEER estos archivos en el
+# servidor; lo que se bloquea es que alguien los descargue/liste por URL.
+# El schema no es secreto (esta en el repo publico), pero no hay razon para
+# servirlo, asi que lo cerramos por higiene.
+
+# Apache/LiteSpeed 2.4+
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>
+
+# Fallback Apache 2.2
+<IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+</IfModule>
