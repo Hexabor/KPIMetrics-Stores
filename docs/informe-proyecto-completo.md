@@ -278,6 +278,19 @@ eso:
 - **Fase 4b**: se cambia el stub por Google OAuth + RBAC real. Como el schema ya
   tiene `users.role`, no cambia nada de la estructura. Decisión reversible.
 
+**Política de acceso de la Fase 4b (definida por Arc, firme):**
+- **Solo cuentas `@webuy.com`** (el dominio corporativo) pueden acceder.
+  Cualquier email de otro dominio queda **fuera por completo** (ni siquiera
+  viewer).
+- Una cuenta `@webuy.com` nueva entra como **`viewer`** por defecto (se da de
+  alta automáticamente al primer login; no hay que pre-añadirla).
+- El **primer admin** es `abeatrice@webuy.com`, sembrado a mano una sola vez.
+- Los **admins pueden elevar** a otras cuentas `@webuy.com` a admin (desde una
+  pantalla "Usuarios" en Configuración, solo para admins).
+- En el backend: verificar el token de Google, comprobar que el email termina
+  en `@webuy.com` (si no, denegar), buscar/crear la fila en `users` (rol viewer
+  por defecto) y aplicar el rol.
+
 ### 6.3 Decisión A — `stores.code` nullable + alta automática
 La app conoce el **nombre** de la tienda pero no un código. En vez de obligar a
 Arc a mapear códigos a mano, se relajó `code` a opcional (migración 002) y las
