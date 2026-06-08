@@ -20,4 +20,5 @@ node_modules/
 
 # Scripts puntuales con credenciales (uso unico, borrar tras usar)
 schema-extract.php
+db-setup.php
 
