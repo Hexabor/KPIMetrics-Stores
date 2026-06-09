@@ -4,6 +4,18 @@
  */
 const Changelog = [
     {
+        date: '09/06/2026 (sesion 4-5 — Stores Edition)',
+        items: [
+            { type: 'new', text: 'LA APP YA FUNCIONA ONLINE. Backend MySQL desplegado (Fase 4a): los datos viven en un servidor central, no en el navegador. Configura grupos de tiendas, familias o cualquier ajuste en un dispositivo y se ven igual desde cualquier otro. Se acabo el almacenamiento local aislado de cada equipo' },
+            { type: 'change', text: 'Reescritura interna de la capa de datos contra una API REST en PHP, manteniendo identica la firma publica (el resto de la app no cambia). Al arrancar se carga un snapshot completo en memoria y los KPIs se siguen calculando en el navegador, igual de rapido; el servidor es solo persistencia. Dexie/IndexedDB retirado' },
+            { type: 'new', text: 'Tuberia CSV -> API -> MySQL -> dashboard validada en vivo con las cinco fuentes: Baby Banking ES, Baby Banking IC, Ecom (cruce de referencias), Captacion (agregada por tienda y dia) y Attachment (tabla propia). Alta automatica de tiendas al importar. La deduplicacion ahora la garantiza un indice UNIQUE en la base de datos' },
+            { type: 'change', text: 'Backup (.json.gz) sigue funcionando igual, ahora exportando el estado de MySQL e incluyendo TODA la configuracion (grupos, familias, alias de captacion, calendario). Restaurar reemplaza por completo la base de datos. Una semana de datos pesa menos de 1 MB gracias a la compresion' },
+            { type: 'change', text: 'GDPR intacto en el salto a MySQL: el campo Staff nunca se almacena, ni en operaciones ni en attachment (defensa en varios puntos del parser y del backend, con tests de regresion)' },
+            { type: 'change', text: 'Acceso interino con Basic Auth + secreto compartido. El login con cuenta Google y los roles (admin / viewer) llegan en una fase posterior, despues de la demo' },
+            { type: 'change', text: 'Home: retirada la card placeholder "Google Drive — Proximamente" (esa funcion no se va a implementar)' },
+        ]
+    },
+    {
         date: '30/05/2026 (sesion 3 — Stores Edition)',
         items: [
             { type: 'change', text: 'Editor de Grupos de tiendas rediseñado igual que el de familias: arriba chips de grupos (clic = activar, con contador y boton Eliminar), abajo el editor del grupo activo con sus tiendas en grid de chips (cada uno con "✕" para quitar). Boton "Renombrar" junto al titulo. Adios al editor inline con checkboxes' },
