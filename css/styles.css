@@ -368,12 +368,25 @@ body.role-viewer .admin-only { display: none !important; }
 }
 
 .home-logo {
-    max-width: 220px;
+    max-width: 264px; /* 20% mayor que los 220px previos */
     width: 100%;
     height: auto;
     display: inline-block;
     mix-blend-mode: darken;
 }
+
+/* Home: centrar todo el bloque (logo + botones) vertical y horizontalmente en
+   el espacio disponible. Usamos #section-home para ganar a .section (display:
+   block) y reponemos el ocultado con #section-home.hidden (si no, el id ganaria
+   a .section.hidden y la seccion no se ocultaria al navegar). */
+#section-home {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    min-height: calc(100vh - var(--topbar-height) - 4rem);
+}
+#section-home.hidden { display: none; }
 
 /* Legacy greeting (retirado, pero mantenemos clases por si algun dia) */
 .home-greeting {
