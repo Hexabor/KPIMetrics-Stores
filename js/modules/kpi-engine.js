@@ -46,6 +46,25 @@ const KPIEngine = (() => {
         return `W${String(wn).padStart(2, '0')}`;
     }
 
+    // Curso de 52 semanas anclado en la W1 2026 (= courseStartDate). Convierte la
+    // semana LINEAL (1 = W1 2026; 0, -1... antes; 53... despues) en {week, year}
+    // de curso, envolviendo cada 52 semanas: antes de la W1 2026 esta la W52 2025,
+    // W51 2025... No depende de la fecha del ancla, solo del numero lineal.
+    const CYCLE_WEEKS = 52;
+    const ANCHOR_YEAR = 2026; // año de curso de la W1 en courseStartDate
+    function weekYear(linearWeek) {
+        const idx0 = linearWeek - 1;
+        const cyc = Math.floor(idx0 / CYCLE_WEEKS);          // floor-div: vale para negativos
+        const w = idx0 - cyc * CYCLE_WEEKS;                  // 0..51
+        return { week: w + 1, year: ANCHOR_YEAR + cyc };
+    }
+
+    /** Etiqueta "W47 2025" a partir de la semana lineal. */
+    function weekYearLabel(linearWeek) {
+        const { week, year } = weekYear(linearWeek);
+        return `W${String(week).padStart(2, '0')} ${year}`;
+    }
+
     /** Register a new KPI calculator */
     function register(id, config) {
         kpis[id] = {
@@ -284,7 +303,7 @@ const KPIEngine = (() => {
         calculateAll,
         setCourseStart,
         getCourseStart,
-        helpers: { groupBy, businessWeek, businessWeekKey, monthKey, periodKey }
+        helpers: { groupBy, businessWeek, businessWeekKey, weekYear, weekYearLabel, monthKey, periodKey }
     };
 })();
 

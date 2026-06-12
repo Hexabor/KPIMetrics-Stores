@@ -1386,10 +1386,11 @@ const App = (() => {
         const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
         const fromDate = new Date(startMs + (weekFrom - 1) * 7 * 86400000).toISOString().substring(0, 10);
         const toDate = new Date(startMs + weekTo * 7 * 86400000 - 86400000).toISOString().substring(0, 10);
+        const wyl = KPIEngine.helpers.weekYearLabel;
         document.getElementById('kpi-panel-week-range').textContent =
             weekFrom === weekTo
-                ? `Semana ${weekFrom} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
-                : `Semanas ${weekFrom}-${weekTo} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`;
+                ? `${wyl(weekFrom)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
+                : `${wyl(weekFrom)} → ${wyl(weekTo)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`;
 
         // Reset sort on data change
         evoState.sortCol = null;
@@ -1529,7 +1530,7 @@ const App = (() => {
         thead.innerHTML = `<tr>
             <th>KPI <span class="col-subject-hint">(Tienda: ${escapeHtml(compareSubject)})</span></th>
             <th class="col-spark">Evolucion</th>
-            ${weeks.map(w => `<th>W${w}</th>`).join('')}
+            ${weeks.map(w => { const wy = KPIEngine.helpers.weekYear(w); return `<th>W${wy.week} <small class="th-year">${String(wy.year).slice(2)}</small></th>`; }).join('')}
             <th class="col-total"><strong>Total</strong></th>
         </tr>`;
 
@@ -1595,7 +1596,7 @@ const App = (() => {
         thead.innerHTML = `<tr>
             <th class="col-rank">#</th>
             <th class="sortable${sortCls('name')}" data-evo-sort="name">Tienda</th>
-            ${weeks.map(w => `<th class="sortable${sortCls(w)}" data-evo-sort="${w}">W${w}</th>`).join('')}
+            ${weeks.map(w => { const wy = KPIEngine.helpers.weekYear(w); return `<th class="sortable${sortCls(w)}" data-evo-sort="${w}">W${wy.week} <small class="th-year">${String(wy.year).slice(2)}</small></th>`; }).join('')}
             <th class="sortable col-total${sortCls('total')}" data-evo-sort="total"><strong>Total</strong></th>
         </tr>`;
 
@@ -3626,7 +3627,7 @@ const App = (() => {
         const start = KPIEngine.getCourseStart();
         const today = new Date().toISOString().substring(0, 10);
         const wk = KPIEngine.helpers.businessWeek(today);
-        el.textContent = `Curso desde ${UI.formatDate(start)}. Hoy es semana ${wk}.`;
+        el.textContent = `Curso desde ${UI.formatDate(start)}. Hoy es ${KPIEngine.helpers.weekYearLabel(wk)}.`;
     }
 
     // ============================
@@ -3813,15 +3814,11 @@ const App = (() => {
         if (!range) return 'Sin datos disponibles.';
         const wrFrom = weekDateRange(range.weekMin);
         const wrTo = weekDateRange(range.weekMax);
-        const yFrom = wrFrom.to.substring(0, 4);
-        const yTo = wrTo.to.substring(0, 4);
+        const wyl = KPIEngine.helpers.weekYearLabel;
         const dateSpan = `${UI.formatDate(wrFrom.from)} — ${UI.formatDate(wrTo.to)}`;
-        if (yFrom === yTo) {
-            return range.weekMin === range.weekMax
-                ? `Datos disponibles: W${range.weekMin} de ${yFrom} (${dateSpan})`
-                : `Datos disponibles: W${range.weekMin} — W${range.weekMax} de ${yFrom} (${dateSpan})`;
-        }
-        return `Datos disponibles: W${range.weekMin}/${yFrom} (${UI.formatDate(wrFrom.from)}) — W${range.weekMax}/${yTo} (${UI.formatDate(wrTo.to)})`;
+        return range.weekMin === range.weekMax
+            ? `Datos disponibles: ${wyl(range.weekMin)} (${dateSpan})`
+            : `Datos disponibles: ${wyl(range.weekMin)} → ${wyl(range.weekMax)} (${dateSpan})`;
     }
 
     async function updateAvailableWeeksLabel(elId) {
@@ -4030,9 +4027,10 @@ const App = (() => {
         const to = weekDateRange(weekTo);
         const el = document.getElementById(elId);
         if (!el) return;
+        const wyl = KPIEngine.helpers.weekYearLabel;
         el.textContent = weekFrom === weekTo
-            ? `Semana ${weekFrom} (${UI.formatDate(from.from)} - ${UI.formatDate(from.to)})`
-            : `Semanas ${weekFrom}-${weekTo} (${UI.formatDate(from.from)} - ${UI.formatDate(to.to)})`;
+            ? `${wyl(weekFrom)} (${UI.formatDate(from.from)} - ${UI.formatDate(from.to)})`
+            : `${wyl(weekFrom)} → ${wyl(weekTo)} (${UI.formatDate(from.from)} - ${UI.formatDate(to.to)})`;
     }
 
     // ============================

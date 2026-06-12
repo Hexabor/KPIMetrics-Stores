@@ -204,6 +204,9 @@ body.role-viewer .admin-only { display: none !important; }
 .kpi-vis-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.18rem 0; font-size: 0.82rem; cursor: pointer; }
 .kpi-vis-row input { cursor: pointer; }
 
+/* Año (curso) pequeño en las cabeceras de semana de Vista por tienda */
+.th-year { font-size: 0.7em; font-weight: 400; color: var(--color-text-lighter); }
+
 /* ===== MODAL ===== */
 .modal-overlay {
     position: fixed;
