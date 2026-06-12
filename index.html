@@ -383,6 +383,7 @@
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="captacion" aria-selected="false">Renombrado captacion</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="grupos" aria-selected="false">Grupos de tiendas</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="familias" aria-selected="false">Familias de categorias</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="kpis" aria-selected="false">KPIs</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="mantenimiento" aria-selected="false">Mantenimiento</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="usuarios" aria-selected="false">Usuarios</button>
             </nav>
@@ -554,6 +555,24 @@
                 <div class="settings-group settings-disabled" title="Proximamente: sincronizacion con Google Drive">
                     <h3>Google Drive</h3>
                     <p>Proximamente. La sincronizacion con Google Drive se implementara en una futura version.</p>
+                </div>
+            </div>
+
+            <!-- TAB: KPIs (visibilidad por vista, admin-only) -->
+            <div class="settings-panel hidden" data-settings-panel="kpis" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Visibilidad de KPIs</h3>
+                    <p>Marca los KPIs que quieres mostrar en cada vista. Los desmarcados se ocultan de las tablas <strong>y</strong> de los selectores, para todos los usuarios. No borra datos: el KPI se sigue calculando y puedes volver a mostrarlo cuando quieras.</p>
+                    <div class="kpi-vis-cols">
+                        <div>
+                            <h4 class="kpi-vis-col-title">Vista general</h4>
+                            <div id="kpi-vis-general"></div>
+                        </div>
+                        <div>
+                            <h4 class="kpi-vis-col-title">Vista por tienda</h4>
+                            <div id="kpi-vis-store"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
 

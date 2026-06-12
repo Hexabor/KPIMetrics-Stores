@@ -47,6 +47,8 @@ const App = (() => {
 
             // Category -> Supercategory mapping (non-blocking: if it fails,
             // every category falls back to "Sin mapear")
+            await loadHiddenKpis();
+
             loadSupercategoryMapping().catch(e => console.warn('Supercat mapping load failed:', e));
             loadFamilyMapping().catch(e => console.warn('Family mapping load failed:', e));
         } catch (e) {
@@ -469,6 +471,7 @@ const App = (() => {
     // DASHBOARD: STORE (evolucion por KPI)
     // ============================
     async function refreshDashStore() {
+        applyHiddenToEvoMetric();
         const stores = (await Database.getDistinctValues('store'))
             .filter(s => !CSVParser.isNonStoreDept(s));
         populateStoreSelect('kpi-panel-store', stores);
@@ -1017,6 +1020,72 @@ const App = (() => {
     }
 
     // ============================
+    // VISIBILIDAD DE KPIs (curacion admin, por vista)
+    // ============================
+    // Setting global `hiddenKpis` = { dashGeneral:[keys], dashStore:[keys] }.
+    // Un KPI oculto desaparece de las tablas Y de los selectores de esa vista,
+    // para todos. No borra datos: se sigue calculando, solo no se muestra.
+    const HIDDEN_KPIS = { dashGeneral: new Set(), dashStore: new Set() };
+
+    // Agrupacion para la pestaña de Configuracion (misma que los optgroup del
+    // desplegable de Vista por tienda).
+    const METRIC_GROUPS = [
+        { name: 'Ventas',          keys: ['netSales', 'grossSales', 'refundsAmount', 'totalItems', 'tickets', 'multiTickets', 'pctMulti', 'avgItems'] },
+        { name: 'Moviles',         keys: ['mobiles', 'mobilesTotal', 'services', 'pctServices', 'basics', 'pctBasics', 'pctCombo'] },
+        { name: 'Compras',         keys: ['buys', 'cashBuys', 'exchanges', 'pctVale'] },
+        { name: 'Captacion',       keys: ['memberships', 'attachPct', 'attachWithMember', 'attachTxs'] },
+        { name: 'Admision a test', keys: ['testOrders', 'testItems', 'testRatio'] },
+        { name: 'Operaciones',     keys: ['operTotal', 'operRefunds', 'operCashBuys', 'operExchanges'] }
+    ];
+
+    async function loadHiddenKpis() {
+        const saved = await Database.getSetting('hiddenKpis');
+        const g = saved && Array.isArray(saved.dashGeneral) ? saved.dashGeneral : [];
+        const s = saved && Array.isArray(saved.dashStore) ? saved.dashStore : [];
+        HIDDEN_KPIS.dashGeneral = new Set(g);
+        HIDDEN_KPIS.dashStore = new Set(s);
+    }
+
+    function isKpiVisible(view, key) {
+        const hidden = HIDDEN_KPIS[view];
+        return !(hidden && hidden.has(key));
+    }
+
+    function metricKeysFor(view) {
+        return Object.keys(METRICS).filter(k => isKpiVisible(view, k));
+    }
+
+    function defaultCompareKpis() {
+        return DEFAULT_COMPARE_KPIS.filter(k => isKpiVisible('dashStore', k));
+    }
+
+    // El desplegable de KPI unico (Vista por tienda) es estatico en el HTML:
+    // ocultamos sus <option>/<optgroup> de los KPIs no visibles y, si el KPI
+    // seleccionado queda oculto, saltamos al primero visible.
+    function applyHiddenToEvoMetric() {
+        const select = document.getElementById('evo-metric');
+        if (!select) return;
+        let firstVisible = null;
+        let currentHidden = false;
+        Array.from(select.options).forEach(opt => {
+            const vis = isKpiVisible('dashStore', opt.value);
+            opt.hidden = !vis;
+            opt.disabled = !vis;
+            if (vis && !firstVisible) firstVisible = opt.value;
+            if (opt.value === select.value && !vis) currentHidden = true;
+        });
+        Array.from(select.querySelectorAll('optgroup')).forEach(og => {
+            const anyVisible = Array.from(og.querySelectorAll('option')).some(o => !o.hidden);
+            og.hidden = !anyVisible;
+            og.disabled = !anyVisible;
+        });
+        if (currentHidden && firstVisible) {
+            select.value = firstVisible;
+            evoState.metric = firstVisible;
+        }
+    }
+
+    // ============================
     // EVOLUTION TABLE
     // ============================
     let evoState = {
@@ -1053,7 +1122,7 @@ const App = (() => {
 
         document.getElementById('evo-kpi-all').addEventListener('change', (e) => {
             evoState.selectedKpis = e.target.checked
-                ? new Set(Object.keys(METRICS))
+                ? new Set(metricKeysFor('dashStore'))
                 : new Set();
             updateEvoKpiUI();
             refreshEvolution();
@@ -1064,7 +1133,7 @@ const App = (() => {
         document.getElementById('evo-kpi-list').addEventListener('change', (e) => {
             if (!e.target.matches('input[type="checkbox"]')) return;
             const key = e.target.dataset.value;
-            if (!evoState.selectedKpis) evoState.selectedKpis = new Set(DEFAULT_COMPARE_KPIS);
+            if (!evoState.selectedKpis) evoState.selectedKpis = new Set(defaultCompareKpis());
             if (e.target.checked) evoState.selectedKpis.add(key);
             else evoState.selectedKpis.delete(key);
             updateEvoKpiUI();
@@ -1072,7 +1141,7 @@ const App = (() => {
         });
 
         document.getElementById('evo-kpi-reset').addEventListener('click', () => {
-            evoState.selectedKpis = new Set(DEFAULT_COMPARE_KPIS);
+            evoState.selectedKpis = new Set(defaultCompareKpis());
             updateEvoKpiUI();
             refreshEvolution();
         });
@@ -1083,8 +1152,8 @@ const App = (() => {
         const searchEl = document.getElementById('evo-kpi-search');
         if (!listEl) return;
         const term = ((searchEl && searchEl.value) || '').toLowerCase();
-        if (!evoState.selectedKpis) evoState.selectedKpis = new Set(DEFAULT_COMPARE_KPIS);
-        const keys = Object.keys(METRICS);
+        if (!evoState.selectedKpis) evoState.selectedKpis = new Set(defaultCompareKpis());
+        const keys = metricKeysFor('dashStore');
         const filtered = term
             ? keys.filter(k => METRICS[k].label.toLowerCase().includes(term))
             : keys;
@@ -1122,9 +1191,10 @@ const App = (() => {
     }
 
     function updateEvoKpiUI() {
-        if (!evoState.selectedKpis) evoState.selectedKpis = new Set(DEFAULT_COMPARE_KPIS);
-        const total = Object.keys(METRICS).length;
-        const n = evoState.selectedKpis.size;
+        if (!evoState.selectedKpis) evoState.selectedKpis = new Set(defaultCompareKpis());
+        const visible = metricKeysFor('dashStore');
+        const total = visible.length;
+        const n = visible.filter(k => evoState.selectedKpis.has(k)).length;
         const countEl = document.getElementById('evo-kpi-count');
         const allCb = document.getElementById('evo-kpi-all');
         if (countEl) countEl.textContent = `${n}/${total}`;
@@ -1284,7 +1354,7 @@ const App = (() => {
         evoState.compareMode = !!compareSubject;
         evoState.compareSubject = compareSubject;
         if (!evoState.selectedKpis) {
-            evoState.selectedKpis = new Set(DEFAULT_COMPARE_KPIS);
+            evoState.selectedKpis = new Set(defaultCompareKpis());
             updateEvoKpiUI();
         }
         updateEvoModeVisibility();
@@ -1436,7 +1506,7 @@ const App = (() => {
         const tbody = document.getElementById('evo-tbody');
         const tfoot = document.getElementById('evo-tfoot');
 
-        const selectedKeys = Object.keys(METRICS).filter(k => evoState.selectedKpis.has(k));
+        const selectedKeys = metricKeysFor('dashStore').filter(k => evoState.selectedKpis.has(k));
         const colCount = weeks.length + 3;
 
         thead.innerHTML = `<tr>
@@ -2514,6 +2584,8 @@ const App = (() => {
         await renderSettingsFamilies();
         await renderCleanupSourcePanel();
         await renderUsersPanel();
+        await loadHiddenKpis();
+        renderKpiVisibilityPanel();
 
         if (DriveSync.isConnected()) {
             const info = await DriveSync.getBackupInfo();
@@ -2598,6 +2670,55 @@ const App = (() => {
         }
         // Re-render para reflejar el estado real (revierte el control si fallo).
         await renderUsersPanel();
+    }
+
+    // ============================
+    // SETTINGS: VISIBILIDAD DE KPIs (admin-only)
+    // ============================
+    function renderKpiVisibilityPanel() {
+        renderKpiVisTable('dashGeneral', 'kpi-vis-general');
+        renderKpiVisTable('dashStore', 'kpi-vis-store');
+    }
+
+    function renderKpiVisTable(view, containerId) {
+        const wrap = document.getElementById(containerId);
+        if (!wrap) return;
+        const hidden = HIDDEN_KPIS[view] || new Set();
+        wrap.innerHTML = METRIC_GROUPS.map(g => {
+            const rows = g.keys.filter(k => METRICS[k]).map(k => {
+                const checked = hidden.has(k) ? '' : 'checked';
+                const lbl = (DG_COLUMN_LABELS[k] && DG_COLUMN_LABELS[k].label) || METRICS[k].label;
+                return `<label class="kpi-vis-row">
+                    <input type="checkbox" data-view="${view}" data-key="${escapeHtml(k)}" ${checked}>
+                    <span>${escapeHtml(lbl)}</span>
+                </label>`;
+            }).join('');
+            if (!rows) return '';
+            return `<div class="kpi-vis-group">
+                <div class="kpi-vis-group-title">${escapeHtml(g.name)}</div>
+                ${rows}
+            </div>`;
+        }).join('');
+
+        wrap.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+            chk.addEventListener('change', () => onKpiVisChange(chk.dataset.view, chk.dataset.key, chk.checked));
+        });
+    }
+
+    async function onKpiVisChange(view, key, visible) {
+        const set = HIDDEN_KPIS[view];
+        if (!set) return;
+        if (visible) set.delete(key); else set.add(key);
+        // Que Vista general recargue/refiltre sus columnas la proxima vez.
+        dgState.columnsLoaded = false;
+        try {
+            await Database.setSetting('hiddenKpis', {
+                dashGeneral: Array.from(HIDDEN_KPIS.dashGeneral),
+                dashStore: Array.from(HIDDEN_KPIS.dashStore)
+            });
+        } catch (e) {
+            console.warn('No se pudo guardar hiddenKpis:', e);
+        }
     }
 
     // ============================
@@ -4032,11 +4153,11 @@ const App = (() => {
         if (dgState.columnsLoaded) return;
         const saved = await Database.getSetting('dgColumns');
         if (Array.isArray(saved) && saved.length) {
-            // Keep only keys that still exist in METRICS
-            dgState.columns = saved.filter(k => METRICS[k]);
+            // Keep only keys que existen en METRICS y son visibles en esta vista
+            dgState.columns = saved.filter(k => METRICS[k] && isKpiVisible('dashGeneral', k));
         }
         if (!dgState.columns || !dgState.columns.length) {
-            dgState.columns = [...DG_DEFAULT_COLUMNS];
+            dgState.columns = DG_DEFAULT_COLUMNS.filter(k => isKpiVisible('dashGeneral', k));
         }
         dgState.columnsLoaded = true;
     }
@@ -4048,8 +4169,8 @@ const App = (() => {
     // The full ordered list used for the picker: active ones first (in their
     // order) followed by inactive ones, preserving registry order within each.
     function dgPickerEntries() {
-        const active = dgState.columns || [];
-        const inactive = Object.keys(METRICS).filter(k => !active.includes(k));
+        const active = (dgState.columns || []).filter(k => isKpiVisible('dashGeneral', k));
+        const inactive = metricKeysFor('dashGeneral').filter(k => !active.includes(k));
         return [
             ...active.map(k => ({ key: k, active: true })),
             ...inactive.map(k => ({ key: k, active: false }))
@@ -4060,7 +4181,7 @@ const App = (() => {
         const list = document.getElementById('dg-kpi-list');
         const count = document.getElementById('dg-kpi-count');
         if (!list || !count) return;
-        const total = Object.keys(METRICS).length;
+        const total = metricKeysFor('dashGeneral').length;
         count.textContent = `${(dgState.columns || []).length}/${total}`;
 
         const entries = dgPickerEntries();
@@ -4261,7 +4382,7 @@ const App = (() => {
         });
 
         resetBtn.addEventListener('click', async () => {
-            dgState.columns = [...DG_DEFAULT_COLUMNS];
+            dgState.columns = DG_DEFAULT_COLUMNS.filter(k => isKpiVisible('dashGeneral', k));
             await saveDashGeneralColumns();
             renderDashGeneralKpiPanel();
             refreshDashGeneral();
@@ -4292,7 +4413,7 @@ const App = (() => {
 
         updateWeekRangeLabel('dg-week-range', weekFrom, weekTo);
 
-        const activeCols = dgState.columns || DG_DEFAULT_COLUMNS;
+        const activeCols = (dgState.columns || DG_DEFAULT_COLUMNS).filter(k => isKpiVisible('dashGeneral', k));
         const totalCols = activeCols.length + 1 + 1; // name + metrics + 1 placeholder (Stock)
 
         if (weekTo < weekFrom || weekTo - weekFrom > 52) {

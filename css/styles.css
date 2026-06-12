@@ -191,6 +191,15 @@ body.role-viewer .admin-only { display: none !important; }
 #users-table .users-role { padding: 0.15rem 0.3rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
 #users-table .users-active { cursor: pointer; }
 
+/* Visibilidad de KPIs (Configuracion -> KPIs) */
+.kpi-vis-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+.kpi-vis-col-title { font-size: 0.8rem; font-weight: 700; color: var(--color-text); margin: 0 0 0.6rem; padding-bottom: 0.3rem; border-bottom: 1px solid var(--color-border); }
+.kpi-vis-group { margin-bottom: 0.85rem; }
+.kpi-vis-group-title { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-text-lighter); margin-bottom: 0.25rem; }
+.kpi-vis-row { display: flex; align-items: center; gap: 0.5rem; padding: 0.18rem 0; font-size: 0.82rem; cursor: pointer; }
+.kpi-vis-row input { cursor: pointer; }
+@media (max-width: 700px) { .kpi-vis-cols { grid-template-columns: 1fr; } }
+
 /* ===== MODAL ===== */
 .modal-overlay {
     position: fixed;
