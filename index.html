@@ -40,7 +40,7 @@
         <button class="sidebar-btn admin-only" data-section="import" title="Importar CSV">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
-        <button class="sidebar-btn" data-section="settings" title="Configuracion">
+        <button class="sidebar-btn admin-only" data-section="settings" title="Configuracion">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         </button>
     </nav>
@@ -92,7 +92,7 @@
                     </div>
                 </div>
 
-                <div class="home-data-section">
+                <div class="home-data-section admin-only">
                     <h4 class="home-col-label">DATA</h4>
                     <div class="dash-button-col">
                         <button class="dash-card" data-action="go-import">
@@ -377,6 +377,7 @@
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="grupos" aria-selected="false">Grupos de tiendas</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="familias" aria-selected="false">Familias de categorias</button>
                 <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="mantenimiento" aria-selected="false">Mantenimiento</button>
+                <button type="button" class="settings-tab-btn" role="tab" data-settings-tab="usuarios" aria-selected="false">Usuarios</button>
             </nav>
 
             <div class="settings-panel" data-settings-panel="calendario" role="tabpanel">
@@ -546,6 +547,29 @@
                 <div class="settings-group settings-disabled" title="Proximamente: sincronizacion con Google Drive">
                     <h3>Google Drive</h3>
                     <p>Proximamente. La sincronizacion con Google Drive se implementara en una futura version.</p>
+                </div>
+            </div>
+
+            <!-- TAB: Usuarios (admin-only, Fase 4b) -->
+            <div class="settings-panel hidden" data-settings-panel="usuarios" role="tabpanel">
+                <div class="settings-group">
+                    <h3>Usuarios</h3>
+                    <p>Cuentas que han entrado con Google. Las cuentas nuevas <strong>@webuy.com</strong> entran como <strong>viewer</strong> (solo lectura); aqui puedes elevarlas a <strong>admin</strong> o desactivarlas. No se puede dejar el sistema sin ningun admin activo.</p>
+                    <table class="alias-table" id="users-table">
+                        <thead>
+                            <tr>
+                                <th>Email</th>
+                                <th>Nombre</th>
+                                <th>Rol</th>
+                                <th>Activa</th>
+                                <th>Ultimo acceso</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-tbody">
+                            <tr><td colspan="5" class="empty-msg">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                    <p class="auth-status" id="users-status"></p>
                 </div>
             </div>
         </section>

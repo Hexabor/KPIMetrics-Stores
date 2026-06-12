@@ -2511,11 +2511,91 @@ const App = (() => {
         await renderSettingsStoreGroups();
         await renderSettingsFamilies();
         await renderCleanupSourcePanel();
+        await renderUsersPanel();
 
         if (DriveSync.isConnected()) {
             const info = await DriveSync.getBackupInfo();
             UI.updateDriveStatus(info ? `Conectado. Ultimo backup: ${info.lastModified}` : 'Conectado.');
         }
+    }
+
+    // ============================
+    // SETTINGS: USUARIOS (admin-only, Fase 4b)
+    // ============================
+    // Lista los usuarios (users.php) y permite cambiar rol (viewer/admin) o
+    // activar/desactivar. El backend exige sesion admin y protege al ultimo
+    // admin activo (409 last_admin); aqui solo reflejamos el resultado.
+
+    function setUsersStatus(msg, isError) {
+        const el = document.getElementById('users-status');
+        if (!el) return;
+        el.textContent = msg || '';
+        el.classList.toggle('is-error', !!isError);
+    }
+
+    // TIMESTAMP "YYYY-MM-DD HH:MM:SS" -> "DD/MM/AAAA HH:MM".
+    function formatDateTime(ts) {
+        if (!ts) return '—';
+        const m = String(ts).match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        return m ? `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}` : String(ts);
+    }
+
+    async function renderUsersPanel() {
+        const tbody = document.getElementById('users-tbody');
+        if (!tbody) return;
+        setUsersStatus('');
+
+        let data;
+        try {
+            data = await Database.getUsers();
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">No se pudieron cargar los usuarios.</td></tr>';
+            return;
+        }
+
+        const users = (data && data.users) || [];
+        const me = (typeof Auth !== 'undefined' && Auth.getUser) ? Auth.getUser() : null;
+        if (!users.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="empty-msg">Aun no hay usuarios.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = users.map(u => {
+            const isMe = me && me.id === u.id;
+            return `<tr data-uid="${u.id}">
+                <td>${escapeHtml(u.email)}${isMe ? ' <span class="users-you">(tú)</span>' : ''}</td>
+                <td>${escapeHtml(u.name || '')}</td>
+                <td>
+                    <select class="users-role" data-uid="${u.id}">
+                        <option value="viewer"${u.role === 'viewer' ? ' selected' : ''}>viewer</option>
+                        <option value="admin"${u.role === 'admin' ? ' selected' : ''}>admin</option>
+                    </select>
+                </td>
+                <td><input type="checkbox" class="users-active" data-uid="${u.id}"${u.active ? ' checked' : ''}></td>
+                <td>${formatDateTime(u.lastLogin)}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.users-role').forEach(sel => {
+            sel.addEventListener('change', () => applyUserChange(sel.dataset.uid, { role: sel.value }));
+        });
+        tbody.querySelectorAll('.users-active').forEach(chk => {
+            chk.addEventListener('change', () => applyUserChange(chk.dataset.uid, { active: chk.checked }));
+        });
+    }
+
+    async function applyUserChange(uid, patch) {
+        try {
+            await Database.updateUser(Object.assign({ id: Number(uid) }, patch));
+            setUsersStatus('Cambios guardados.', false);
+        } catch (e) {
+            const msg = String(e && e.message || '').includes('last_admin')
+                ? 'No puedes quitar el último administrador activo.'
+                : 'No se pudo guardar el cambio.';
+            setUsersStatus(msg, true);
+        }
+        // Re-render para reflejar el estado real (revierte el control si fallo).
+        await renderUsersPanel();
     }
 
     // ============================

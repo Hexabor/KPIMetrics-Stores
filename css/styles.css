@@ -169,6 +169,13 @@ body {
 
 /* RBAC: un viewer no ve los controles marcados como admin-only */
 body.role-viewer .admin-only { display: none !important; }
+/* Sin la columna DATA, COBERTURA ocupa todo el ancho del grid del Home */
+body.role-viewer .home-bottom-grid { grid-template-columns: 1fr; }
+
+/* Tabla de usuarios (Configuración → Usuarios) */
+#users-table .users-you { color: var(--color-text-light); font-size: 0.85em; }
+#users-table .users-role { padding: 0.15rem 0.3rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); }
+#users-table .users-active { cursor: pointer; }
 
 /* ===== MODAL ===== */
 .modal-overlay {

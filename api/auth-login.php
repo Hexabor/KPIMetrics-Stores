@@ -113,4 +113,4 @@ $_SESSION['email']   = $email;
 $_SESSION['name']    = $name;
 $_SESSION['role']    = $role;
 
-responderJson(['email' => $email, 'name' => $name, 'role' => $role]);
+responderJson(['id' => $uid, 'email' => $email, 'name' => $name, 'role' => $role]);

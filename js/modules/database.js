@@ -484,6 +484,19 @@ const Database = (() => {
         invalidate();
     }
 
+    // ===================== Usuarios (Fase 4b, admin-only) =====================
+    // No tocan el snapshot: hablan directamente con users.php. El backend exige
+    // sesión admin (un viewer recibe 403 y apiGet/apiPost lanzan).
+
+    async function getUsers() {
+        return apiGet('users.php'); // { users: [...] }
+    }
+
+    async function updateUser(payload) {
+        // payload: { id, role?, active? }. users.php acepta POST además de PUT.
+        return apiPost('users.php', payload);
+    }
+
     return {
         init,
         getAllOperations,
@@ -513,6 +526,8 @@ const Database = (() => {
         importAll,
         clearAll,
         deleteBySource,
-        getStorageSummaryBySource
+        getStorageSummaryBySource,
+        getUsers,
+        updateUser
     };
 })();
