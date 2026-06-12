@@ -4,6 +4,19 @@
  */
 const Changelog = [
     {
+        date: '12/06/2026 (sesion 6 — Stores Edition)',
+        items: [
+            { type: 'new', text: 'INICIO DE SESION CON GOOGLE (Fase 4b). Ya no se entra "a pelo": cada usuario inicia sesion con su cuenta Google corporativa. Solo se permiten cuentas @webuy.com; cualquier otro dominio queda fuera. Dos roles reales: admin (acceso total) y viewer (solo lectura). Una cuenta nueva entra como viewer automaticamente. Validado en produccion con cuenta admin y cuenta viewer' },
+            { type: 'new', text: 'Configuracion: nueva pestaña "Usuarios" (solo admin). Lista quien ha entrado, su rol y su ultimo acceso, y permite elevar a admin / bajar a viewer o desactivar cuentas. No se puede dejar el sistema sin ningun admin activo' },
+            { type: 'change', text: 'Los viewers (solo lectura) no ven los controles de escritura: ni la rueda de Configuracion ni la seccion DATA del inicio (importar, configuracion, exportar/importar backup). La seguridad real vive en el servidor (rechaza cualquier escritura sin permiso); ocultarlos es solo para no liar' },
+            { type: 'new', text: 'Configuracion: nueva pestaña "KPIs" (solo admin). Permite elegir que KPIs se muestran en cada vista (Vista general y Vista por tienda) por separado. Un KPI desmarcado desaparece de las tablas Y de los selectores, para todos los usuarios. No borra datos: se sigue calculando y se puede volver a mostrar cuando quieras. Util para esconder metricas poco relevantes o que confunden' },
+            { type: 'new', text: 'KPI nuevo: Ratio C/V (compras / ventas netas, en %). Mide cuanto facturamos comprando respecto a lo que vendemos. El estandar de la compañia es 65% (marca a una tienda como teoricamente autosostenible): verde >=65, ambar 60-64, rojo por debajo' },
+            { type: 'new', text: 'Las semanas ahora muestran su AÑO de curso, para evitar ambiguedades en rangos que cruzan de año (p. ej. "W47 2025 -> W05 2026"). La semana 1 del curso 2026 empieza el 27/12/2025; el sistema numera hacia adelante y hacia atras (antes de la W1 2026 esta la W52 2025, W51 2025...). El año aparece junto a los selectores De W / a W, en las cabeceras de la tabla de Vista por tienda y en las etiquetas de rango. Cada curso tiene 52 semanas' },
+            { type: 'change', text: 'La Cobertura sale del inicio a su propia pestaña en la barra lateral (disponible para admin y viewer), como vista de consulta con espacio para crecer' },
+            { type: 'change', text: 'Inicio rediseñado: el conjunto de logo + botones queda centrado vertical y horizontalmente, con el logo mas grande. Los accesos de DATA se agrupan en una cuadricula 2x2 y "Exportar" pasa a llamarse "Exportar backup"' },
+        ]
+    },
+    {
         date: '09/06/2026 (sesion 4-5 — Stores Edition)',
         items: [
             { type: 'new', text: 'LA APP YA FUNCIONA ONLINE. Backend MySQL desplegado (Fase 4a): los datos viven en un servidor central, no en el navegador. Configura grupos de tiendas, familias o cualquier ajuste en un dispositivo y se ven igual desde cualquier otro. Se acabo el almacenamiento local aislado de cada equipo' },
