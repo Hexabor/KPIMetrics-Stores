@@ -171,8 +171,18 @@ body {
 body.role-viewer .admin-only { display: none !important; }
 
 /* DATA en el Home, ahora sin la columna de cobertura (que tiene seccion propia).
-   Ancho justo al contenido (las dash-card se estiran al ancho de la columna) y centrado. */
-.home-data-standalone { width: fit-content; max-width: 100%; margin: 0 auto; }
+   Matriz 2x2 centrada. grid-auto-flow:column rellena por columnas, asi que con
+   el orden del HTML (Importar CSV, Configuracion, Exportar, Importar backup):
+     col izquierda = Importar CSV / Configuracion
+     col derecha   = Exportar backup / Importar backup */
+.home-data-standalone { width: 100%; max-width: 480px; margin: 0 auto; }
+.home-data-standalone .dash-button-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(2, auto);
+    grid-auto-flow: column;
+    gap: 0.6rem;
+}
 /* Cobertura en su seccion propia */
 .coverage-standalone { max-width: 900px; margin: 0 auto; }
 
