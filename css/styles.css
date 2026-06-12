@@ -170,8 +170,9 @@ body {
 /* RBAC: un viewer no ve los controles marcados como admin-only */
 body.role-viewer .admin-only { display: none !important; }
 
-/* DATA en el Home, ahora sin la columna de cobertura (que tiene seccion propia) */
-.home-data-standalone { max-width: 340px; margin: 0 auto; }
+/* DATA en el Home, ahora sin la columna de cobertura (que tiene seccion propia).
+   Ancho justo al contenido (las dash-card se estiran al ancho de la columna) y centrado. */
+.home-data-standalone { width: fit-content; max-width: 100%; margin: 0 auto; }
 /* Cobertura en su seccion propia */
 .coverage-standalone { max-width: 900px; margin: 0 auto; }
 
