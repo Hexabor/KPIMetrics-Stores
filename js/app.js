@@ -4775,6 +4775,16 @@ const App = (() => {
         return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
     }
 
-    document.addEventListener('DOMContentLoaded', init);
+    // Fase 4b: la app no arranca hasta que hay sesión. Auth.boot pinta el login
+    // si no la hay y llama a init() solo cuando el usuario está autenticado.
+    document.addEventListener('DOMContentLoaded', () => {
+        if (typeof Auth !== 'undefined' && Auth.boot) {
+            Auth.boot(init);
+        } else {
+            // Fallback defensivo: si auth-ui no cargó, arranca igual (el backend
+            // seguirá exigiendo sesión y devolverá 401).
+            init();
+        }
+    });
     return { init };
 })();

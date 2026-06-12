@@ -100,6 +100,76 @@ body {
     color: var(--color-primary);
 }
 
+/* ===== AUTH (Fase 4b) ===== */
+/* Caja de usuario en la topbar */
+.topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+.topbar-user-name {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--color-text);
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.topbar-user-role {
+    font-size: 0.6rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.1rem 0.4rem;
+    border-radius: 999px;
+    background: var(--color-primary-light);
+    color: var(--color-primary);
+}
+.topbar-logout {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.2rem;
+    border: none;
+    background: transparent;
+    color: var(--color-text-light);
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: all 0.15s;
+}
+.topbar-logout:hover { background: var(--color-border-light); color: var(--color-danger); }
+
+/* Pantalla de login (overlay a pantalla completa) */
+.auth-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-bg);
+}
+.auth-overlay.visible { display: flex; }
+.auth-card {
+    width: min(92vw, 360px);
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-md);
+    padding: 2.25rem 2rem;
+    text-align: center;
+}
+.auth-logo { max-width: 96px; height: auto; margin-bottom: 1rem; }
+.auth-title { font-size: 1.15rem; font-weight: 700; color: var(--color-text); margin: 0 0 0.35rem; }
+.auth-sub { font-size: 0.82rem; color: var(--color-text-light); margin: 0 0 1.5rem; }
+.auth-btn { display: flex; justify-content: center; min-height: 44px; }
+.auth-status { font-size: 0.8rem; color: var(--color-text-light); margin: 1rem 0 0; min-height: 1.2em; }
+.auth-status.is-error { color: var(--color-danger); }
+
+/* RBAC: un viewer no ve los controles marcados como admin-only */
+body.role-viewer .admin-only { display: none !important; }
+
 /* ===== MODAL ===== */
 .modal-overlay {
     position: fixed;

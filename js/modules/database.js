@@ -35,18 +35,32 @@ const Database = (() => {
 
     // ===================== Infraestructura HTTP =====================
 
+    // 401 = sesión ausente/caducada. Avisamos a auth-ui (que reabre el login)
+    // y propagamos el error para cortar la operación en curso.
+    function handle401() {
+        window.dispatchEvent(new CustomEvent('auth:expired'));
+    }
+
     async function apiGet(path) {
-        const res = await fetch(`${API_BASE}/${path}`, { headers: { 'Accept': 'application/json' } });
+        const res = await fetch(`${API_BASE}/${path}`, {
+            credentials: 'same-origin',
+            headers: { 'Accept': 'application/json' }
+        });
+        if (res.status === 401) { handle401(); throw new Error(`GET ${path} -> 401`); }
         if (!res.ok) throw new Error(`GET ${path} -> ${res.status}`);
         return res.json();
     }
 
     async function apiPost(path, body) {
+        // Fase 4b: la autenticación va por la cookie de sesión (credentials),
+        // no por X-App-Secret. El backend exige sesión admin para escribir.
         const res = await fetch(`${API_BASE}/${path}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-App-Secret': APP_SECRET },
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body || {})
         });
+        if (res.status === 401) { handle401(); throw new Error(`POST ${path} -> 401`); }
         if (!res.ok) {
             let detail = '';
             try { detail = JSON.stringify(await res.json()); } catch (e) { /* ignore */ }
