@@ -951,6 +951,22 @@ const App = (() => {
                 const t = b.cashBuyAmount + b.exchangeAmount;
                 return t > 0 ? formatPctDetail(Math.round(b.exchangeAmount), Math.round(t)) : '--';
             } },
+        // Ratio C/V = compras / ventas netas (%). Estandar compania 65% =
+        // tienda teoricamente autosostenible. Denominador = ventas netas (mismo
+        // calculo que netSales, respeta el filtro ecom-por-KPI).
+        ratioCV:       { label: 'Ratio C/V',             isPct: true,
+            value: (b, fe) => {
+                const ventas = bf(b, 'saleRevenue', fe) - bf(b, 'refundAmount', fe);
+                const compras = b.cashBuyAmount + b.exchangeAmount;
+                return ventas > 0 ? (compras / ventas) * 100 : 0;
+            },
+            format: (v, b, fe) => {
+                const ventas = bf(b, 'saleRevenue', fe) - bf(b, 'refundAmount', fe);
+                const compras = b.cashBuyAmount + b.exchangeAmount;
+                return ventas > 0
+                    ? formatPctDetail(Math.round(compras), Math.round(ventas), { good: 65, ok: 60 })
+                    : '--';
+            } },
         // Captacion (a nivel tienda)
         memberships:   { label: 'Socios',
             value: b => b.memberships || 0,
@@ -1032,7 +1048,7 @@ const App = (() => {
     const METRIC_GROUPS = [
         { name: 'Ventas',          keys: ['netSales', 'grossSales', 'refundsAmount', 'totalItems', 'tickets', 'multiTickets', 'pctMulti', 'avgItems'] },
         { name: 'Moviles',         keys: ['mobiles', 'mobilesTotal', 'services', 'pctServices', 'basics', 'pctBasics', 'pctCombo'] },
-        { name: 'Compras',         keys: ['buys', 'cashBuys', 'exchanges', 'pctVale'] },
+        { name: 'Compras',         keys: ['buys', 'cashBuys', 'exchanges', 'pctVale', 'ratioCV'] },
         { name: 'Captacion',       keys: ['memberships', 'attachPct', 'attachWithMember', 'attachTxs'] },
         { name: 'Admision a test', keys: ['testOrders', 'testItems', 'testRatio'] },
         { name: 'Operaciones',     keys: ['operTotal', 'operRefunds', 'operCashBuys', 'operExchanges'] }
@@ -1293,6 +1309,7 @@ const App = (() => {
         cashBuys:      { label: 'Cash buys',      title: 'Compras en efectivo' },
         exchanges:     { label: 'Exchanges',      title: 'Compras en vale' },
         pctVale:       { label: '% Vale',         title: '% de compras hechas con vale de tienda (exchange)' },
+        ratioCV:       { label: 'Ratio C/V',      title: 'Compras / Ventas netas (%). Estandar compania 65% = tienda teoricamente autosostenible' },
         memberships:   { label: 'Socios',         title: 'Socios captados en el rango de semanas' },
         attachTxs:     { label: 'T. attach',      title: 'Transacciones de venta en tienda (fuente: Attachment del Looker, agregado semanal). Se compara con tickets de Baby Banking al importar' },
         attachWithMember: { label: 'Vtas socio',  title: 'Ventas en tienda hechas con socio (fuente: Attachment del Looker, agregado semanal)' },
