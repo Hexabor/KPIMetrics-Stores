@@ -207,6 +207,9 @@ body.role-viewer .admin-only { display: none !important; }
 /* Año (curso) pequeño en las cabeceras de semana de Vista por tienda */
 .th-year { font-size: 0.7em; font-weight: 400; color: var(--color-text-lighter); }
 
+/* Año (curso) junto a los inputs De W / a W */
+.week-input-year { font-size: 0.78rem; font-weight: 600; color: var(--color-text-light); margin: 0 0.4rem 0 -0.2rem; }
+
 /* ===== MODAL ===== */
 .modal-overlay {
     position: fixed;

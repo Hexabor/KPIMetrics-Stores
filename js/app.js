@@ -133,6 +133,8 @@ const App = (() => {
         // Vista por tienda filters (evolucion semanal unificada)
         document.getElementById('evo-week-from').addEventListener('change', refreshEvolution);
         document.getElementById('evo-week-to').addEventListener('change', refreshEvolution);
+        document.getElementById('evo-week-from').addEventListener('input', e => setWeekInputYear('evo-week-from-year', e.target.value));
+        document.getElementById('evo-week-to').addEventListener('input', e => setWeekInputYear('evo-week-to-year', e.target.value));
         document.getElementById('evo-metric').addEventListener('change', () => {
             const m = document.getElementById('evo-metric').value;
             document.getElementById('evo-min-ops').disabled = !METRICS[m]?.isPct;
@@ -154,6 +156,8 @@ const App = (() => {
         // Dashboard: general
         document.getElementById('dg-week-from').addEventListener('change', refreshDashGeneral);
         document.getElementById('dg-week-to').addEventListener('change', refreshDashGeneral);
+        document.getElementById('dg-week-from').addEventListener('input', e => setWeekInputYear('dg-week-from-year', e.target.value));
+        document.getElementById('dg-week-to').addEventListener('input', e => setWeekInputYear('dg-week-to-year', e.target.value));
 
         // Dashboard: detail
         document.getElementById('dd-week-from').addEventListener('change', refreshDashDetail);
@@ -1391,6 +1395,8 @@ const App = (() => {
             weekFrom === weekTo
                 ? `${wyl(weekFrom)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
                 : `${wyl(weekFrom)} → ${wyl(weekTo)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`;
+        setWeekInputYear('evo-week-from-year', weekFrom);
+        setWeekInputYear('evo-week-to-year', weekTo);
 
         // Reset sort on data change
         evoState.sortCol = null;
@@ -4022,6 +4028,14 @@ const App = (() => {
         document.getElementById(allCbId).checked = nSel === items.length && items.length > 0;
     }
 
+    // Pone el año de curso junto a un input de semana (De W / a W).
+    function setWeekInputYear(spanId, week) {
+        const el = document.getElementById(spanId);
+        if (!el) return;
+        const w = parseInt(week);
+        el.textContent = Number.isFinite(w) ? KPIEngine.helpers.weekYear(w).year : '';
+    }
+
     function updateWeekRangeLabel(elId, weekFrom, weekTo) {
         const from = weekDateRange(weekFrom);
         const to = weekDateRange(weekTo);
@@ -4427,6 +4441,8 @@ const App = (() => {
         const weekTo = parseInt(toEl.value) || weekFrom;
 
         updateWeekRangeLabel('dg-week-range', weekFrom, weekTo);
+        setWeekInputYear('dg-week-from-year', weekFrom);
+        setWeekInputYear('dg-week-to-year', weekTo);
 
         const activeCols = (dgState.columns || DG_DEFAULT_COLUMNS).filter(k => isKpiVisible('dashGeneral', k));
         const totalCols = activeCols.length + 1 + 1; // name + metrics + 1 placeholder (Stock)
