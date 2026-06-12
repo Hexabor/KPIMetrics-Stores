@@ -242,6 +242,7 @@ const App = (() => {
         if (sidebarBtn) sidebarBtn.classList.add('active');
 
         if (sectionId === 'home') refreshHome();
+        if (sectionId === 'coverage') refreshCoverage();
         if (sectionId === 'import') { renderImportHistory(); renderEcomTimeline(); }
         if (sectionId === 'settings') loadSettings();
         if (sectionId === 'dash-general') refreshDashGeneral();
@@ -264,8 +265,11 @@ const App = (() => {
     async function refreshHome() {
         const count = await Database.getRecordCount();
         document.getElementById('db-status-badge').textContent = `DB: ${count.toLocaleString()}`;
+        updateTopbarWeek();
+    }
 
-        // Store count shown next to COBERTURA label
+    // Cobertura: ahora vive en su propia seccion (consulta, admin y viewer).
+    async function refreshCoverage() {
         const stores = await Database.getDistinctValues('store');
         const storeCountEl = document.getElementById('coverage-store-count');
         if (storeCountEl) {
@@ -273,8 +277,6 @@ const App = (() => {
             else if (stores.length === 1) storeCountEl.textContent = `· ${stores[0]}`;
             else storeCountEl.textContent = `· ${stores.length} tiendas`;
         }
-
-        updateTopbarWeek();
         await renderCoverageBars();
     }
 

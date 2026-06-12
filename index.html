@@ -37,6 +37,9 @@
         <button class="sidebar-btn active" data-section="home" title="Inicio">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
         </button>
+        <button class="sidebar-btn" data-section="coverage" title="Cobertura">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </button>
         <button class="sidebar-btn admin-only" data-section="import" title="Importar CSV">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         </button>
@@ -82,17 +85,8 @@
                 </div>
             </div>
 
-            <!-- COBERTURA + DATA en 2 columnas -->
-            <div class="home-bottom-grid">
-                <div class="home-coverage-section">
-                    <h4 class="home-col-label">COBERTURA <span class="home-col-meta" id="coverage-store-count"></span></h4>
-                    <div class="home-summary-card">
-                        <div id="coverage-bars"></div>
-                        <div class="coverage-empty hidden" id="coverage-empty">Sin datos importados</div>
-                    </div>
-                </div>
-
-                <div class="home-data-section admin-only">
+            <!-- DATA (acciones de datos, solo admin) -->
+            <div class="home-data-section home-data-standalone admin-only">
                     <h4 class="home-col-label">DATA</h4>
                     <div class="dash-button-col">
                         <button class="dash-card" data-action="go-import">
@@ -126,10 +120,23 @@
                         <input type="file" id="json-input" accept=".json,.json.gz,.gz" hidden>
                     </div>
                 </div>
-            </div>
 
             <!-- LOG -->
             <div id="import-log" class="log-container"></div>
+        </section>
+
+        <!-- COBERTURA (consulta: admin y viewer) -->
+        <section id="section-coverage" class="section hidden">
+            <div class="section-header">
+                <h2>Cobertura <span class="home-col-meta" id="coverage-store-count"></span></h2>
+                <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
+            </div>
+            <div class="coverage-standalone">
+                <div class="home-summary-card">
+                    <div id="coverage-bars"></div>
+                    <div class="coverage-empty hidden" id="coverage-empty">Sin datos importados</div>
+                </div>
+            </div>
         </section>
 
         <!-- IMPORT -->

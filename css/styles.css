@@ -169,8 +169,11 @@ body {
 
 /* RBAC: un viewer no ve los controles marcados como admin-only */
 body.role-viewer .admin-only { display: none !important; }
-/* Sin la columna DATA, COBERTURA ocupa todo el ancho del grid del Home */
-body.role-viewer .home-bottom-grid { grid-template-columns: 1fr; }
+
+/* DATA en el Home, ahora sin la columna de cobertura (que tiene seccion propia) */
+.home-data-standalone { max-width: 340px; margin: 0 auto; }
+/* Cobertura en su seccion propia */
+.coverage-standalone { max-width: 900px; margin: 0 auto; }
 
 /* Tabla de usuarios (Configuración → Usuarios) */
 #users-table .users-you { color: var(--color-text-light); font-size: 0.85em; }
@@ -695,28 +698,8 @@ body.role-viewer .home-bottom-grid { grid-template-columns: 1fr; }
     margin: 0 auto 2rem;
 }
 
-.home-coverage-section {
-    min-width: 0;
-}
-
 .home-data-section {
     min-width: 0;
-}
-
-.home-bottom-grid {
-    display: grid;
-    grid-template-columns: 1.5fr 1fr;
-    gap: 2rem;
-    max-width: 860px;
-    margin: 0 auto 2.5rem;
-    padding-top: 1.5rem;
-    border-top: 1px solid var(--color-border);
-}
-
-@media (max-width: 720px) {
-    .home-bottom-grid {
-        grid-template-columns: 1fr;
-    }
 }
 
 .dash-button-grid {
