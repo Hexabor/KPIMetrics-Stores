@@ -16,6 +16,7 @@
  */
 
 require_once __DIR__ . '/auth.php'; // trae config.php + responderJson()
+exigirSesion();                     // 4b: leer el snapshot requiere sesión (viewer o admin)
 
 $db = dbConnect();
 

@@ -1,55 +1,77 @@
 <?php
 /**
- * auth.php — La "costura" de permisos.
+ * auth.php — La "costura" de permisos (Fase 4b: sesión real + RBAC).
  * -----------------------------------------------------------------------
- * Punto UNICO donde se decide quien puede escribir. Hoy (Fase 4a) es un
- * stub: perfil unico admin, validado solo por el secreto compartido.
+ * Punto UNICO donde se decide quién puede leer y quién puede escribir.
  *
- * En la Fase 4b se rellena con la sesion de Google OAuth + el rol real.
- * Como TODOS los endpoints de escritura llaman a exigirAdmin(), ese dia se
- * cambia SOLO esta funcion y todo queda protegido de golpe. Cero deuda.
+ * En 4a era un stub (admin único validado por secreto compartido). En 4b se
+ * apoya en la SESIÓN abierta tras el login con Google (ver auth-login.php) y
+ * en el ROL del usuario (admin/viewer). Como los 9 endpoints de escritura ya
+ * llamaban a exigirAdmin() desde 4a, rellenar esta función los protege a todos
+ * de golpe.
+ *
+ *   - exigirSesion(): cualquier usuario logueado (lecturas, p. ej. snapshot).
+ *   - exigirAdmin():  además rol === 'admin' (escrituras).
  */
 
 require_once __DIR__ . '/../config.php';
 
-/**
- * Devuelve el usuario actual.
- * Fase 4a: siempre el admin unico.
- * Fase 4b: el usuario autenticado por OAuth (de la sesion).
- */
-function usuarioActual() {
-    return ['id' => 0, 'name' => 'admin', 'role' => 'admin'];
+// Arranca la sesión (cookie segura) una sola vez, antes de cualquier salida.
+// Como cada endpoint hace require de este archivo lo primero, la cabecera
+// Set-Cookie se emite siempre antes de imprimir el cuerpo.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'httponly' => true,
+        'secure'   => true,
+        'samesite' => 'Lax',
+    ]);
+    session_start();
 }
 
 /**
- * Exige permisos de escritura. Corta con 403 si no los hay.
- * Fase 4a: comprueba solo el secreto compartido (cabecera X-App-Secret).
- * Fase 4b: AÑADIR aqui -> exigir sesion valida y usuarioActual()['role']==='admin'.
+ * Devuelve el usuario actual desde la sesión, o null si no hay sesión.
+ */
+function usuarioActual() {
+    if (empty($_SESSION['user_id'])) return null;
+    return [
+        'id'    => (int) $_SESSION['user_id'],
+        'email' => $_SESSION['email'] ?? '',
+        'name'  => $_SESSION['name']  ?? '',
+        'role'  => $_SESSION['role']  ?? 'viewer',
+    ];
+}
+
+/**
+ * Exige una sesión válida (cualquier rol). Corta con 401 si no la hay.
+ * Para lecturas: un viewer puede leer, un anónimo no.
+ */
+function exigirSesion() {
+    $u = usuarioActual();
+    if (!$u) {
+        http_response_code(401);
+        header('Content-Type: application/json; charset=utf-8');
+        exit(json_encode(['error' => 'unauthenticated']));
+    }
+    return $u;
+}
+
+/**
+ * Exige sesión válida Y rol admin. Corta con 401/403. Para escrituras.
  */
 function exigirAdmin() {
-    // Fase 4a, admin de facto por dos vias (cualquiera vale):
-    //   1) Secreto compartido en cabecera X-App-Secret (lo manda el frontend
-    //      y las herramientas tipo curl/migrate).
-    //   2) Haber pasado el Basic Auth del .htaccess (el navegador reenvia las
-    //      credenciales en las peticiones same-origin). Cubre el caso de que
-    //      el secreto no llegue por config del servidor.
-    $secret = $_SERVER['HTTP_X_APP_SECRET'] ?? '';
-    $hasSecret = APP_SECRET !== '' && hash_equals(APP_SECRET, $secret);
-    $hasBasicAuth = !empty($_SERVER['PHP_AUTH_USER'])
-        || !empty($_SERVER['REMOTE_USER'])
-        || !empty($_SERVER['REDIRECT_REMOTE_USER']);
-
-    if (!$hasSecret && !$hasBasicAuth) {
+    $u = exigirSesion();
+    if ($u['role'] !== 'admin') {
         http_response_code(403);
         header('Content-Type: application/json; charset=utf-8');
         exit(json_encode(['error' => 'forbidden']));
     }
-    // Fase 4b: sustituir "Basic Auth presente" por "sesion OAuth valida y
-    // usuarioActual()['role'] === 'admin'".
+    return $u;
 }
 
 /**
- * Helper: envia una respuesta JSON y termina. Lo usaran los endpoints.
+ * Helper: envia una respuesta JSON y termina. Lo usan los endpoints.
  */
 function responderJson($data, $status = 200) {
     http_response_code($status);
