@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import CSVParser from '../js/modules/csv-parser.js';
 
 const { mapRecord, normalizeDate } = CSVParser._internals;
-const { isNonStoreDept } = CSVParser;
+const { isNonStoreDept, aggregateTestAdmissions } = CSVParser;
 
 describe('isNonStoreDept - filtro defensivo de departamentos no-tienda', () => {
     it('descarta variantes de Ecommerce (con y sin "e" extra)', () => {
@@ -469,5 +469,64 @@ describe('mapRecord - regresion GDPR: Staff nunca entra al modelo', () => {
         expect(r).not.toBeNull();
         expect(r.staff).toBeUndefined();
         expect('staff' in r).toBe(false);
+    });
+});
+
+describe('aggregateTestAdmissions - items admitidos a test por pedido', () => {
+    it('suma Quantity de todas las filas test del mismo pedido en una sola', () => {
+        // Pedido con 3 items a test (uno con Quantity 3) → 1 fila, quantity = 5
+        const records = [
+            { type: 'test-admission', reference: 'ORD1', category: 'Test', quantity: 1, price: 0 },
+            { type: 'test-admission', reference: 'ORD1', category: 'TEST', quantity: 1, price: 0 },
+            { type: 'test-admission', reference: 'ORD1', category: 'Test', quantity: 3, price: 0 }
+        ];
+        const out = aggregateTestAdmissions(records);
+        expect(out).toHaveLength(1);
+        expect(out[0].reference).toBe('ORD1');
+        expect(out[0].quantity).toBe(5);
+        expect(out.reduce((a, r) => a + r.quantity, 0)).toBe(5);
+    });
+
+    it('mantiene pedidos distintos separados y no toca otras filas', () => {
+        const records = [
+            { type: 'test-admission', reference: 'A', quantity: 2, price: 0 },
+            { type: 'sale', reference: 'A', quantity: 1, price: 100 },
+            { type: 'test-admission', reference: 'B', quantity: 1, price: 0 },
+            { type: 'test-admission', reference: 'A', quantity: 1, price: 0 }
+        ];
+        const out = aggregateTestAdmissions(records);
+        const test = out.filter(r => r.type === 'test-admission');
+        expect(test).toHaveLength(2);                       // A y B
+        expect(out.filter(r => r.type === 'sale')).toHaveLength(1); // la venta intacta
+        expect(test.find(r => r.reference === 'A').quantity).toBe(3);
+        expect(test.find(r => r.reference === 'B').quantity).toBe(1);
+    });
+
+    it('regresion W24: total de items se preserva (207, no 133)', () => {
+        // Reproduce el caso real: muchas filas test de pocos pedidos, varias por
+        // pedido. La suma total de Quantity debe conservarse tras agregar.
+        const records = [];
+        let total = 0;
+        // 30 pedidos, cada uno con 1..5 items (quantity 1 cada fila, salvo algunos)
+        for (let o = 0; o < 30; o++) {
+            const items = (o % 5) + 1;            // 1..5 filas por pedido
+            for (let i = 0; i < items; i++) {
+                const q = (i === 0 && o % 7 === 0) ? 3 : 1; // alguna fila con Quantity 3
+                records.push({ type: 'test-admission', reference: `ORD${o}`, category: i % 2 ? 'TEST' : 'Test', quantity: q, price: 0 });
+                total += q;
+            }
+        }
+        const out = aggregateTestAdmissions(records);
+        expect(out).toHaveLength(30);                                   // 1 fila por pedido
+        expect(out.reduce((a, r) => a + r.quantity, 0)).toBe(total);    // items preservados
+    });
+
+    it('filas sin reference se dejan tal cual (no se agregan)', () => {
+        const records = [
+            { type: 'test-admission', reference: '', quantity: 1, price: 0 },
+            { type: 'test-admission', reference: '', quantity: 1, price: 0 }
+        ];
+        const out = aggregateTestAdmissions(records);
+        expect(out).toHaveLength(2);
     });
 });

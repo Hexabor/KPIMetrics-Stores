@@ -65,6 +65,11 @@ const KPIEngine = (() => {
         return `W${String(week).padStart(2, '0')} ${year}`;
     }
 
+    /** Inverso de weekYear: (año de curso, semana 1-52) -> semana lineal. */
+    function courseWeekToLinear(year, week) {
+        return (year - ANCHOR_YEAR) * CYCLE_WEEKS + week;
+    }
+
     /** Register a new KPI calculator */
     function register(id, config) {
         kpis[id] = {
@@ -303,7 +308,7 @@ const KPIEngine = (() => {
         calculateAll,
         setCourseStart,
         getCourseStart,
-        helpers: { groupBy, businessWeek, businessWeekKey, weekYear, weekYearLabel, monthKey, periodKey }
+        helpers: { groupBy, businessWeek, businessWeekKey, weekYear, weekYearLabel, courseWeekToLinear, monthKey, periodKey }
     };
 })();
 

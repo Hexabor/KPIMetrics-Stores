@@ -396,6 +396,40 @@ const CSVParser = (() => {
         return str;
     }
 
+    /**
+     * Agrega las filas de admision a test (type='test-admission') por Order
+     * Number, sumando Quantity en UNA sola fila por pedido.
+     *
+     * Cada pedido a test aparece en el CSV como VARIAS filas (una por item/
+     * serial), todas con la misma reference, price=0 y category "Test"/"TEST".
+     * La clave de dedup al guardar es (reference, source, price, category) y NO
+     * incluye quantity; ademas la colacion de MySQL es case-insensitive, asi que
+     * "Test" == "TEST". Sin agregar, todas esas filas colapsan a UNA al guardar
+     * y se pierde el conteo real de items (p.ej. 207 -> 133). Agregando aqui
+     * (igual que captacion) se preserva la suma de items y la dedup por
+     * reference queda idempotente al reimportar.
+     *
+     * Las filas que no son test-admission, o sin reference, se devuelven tal
+     * cual y en su posicion original. Pura: no muta los registros de entrada.
+     */
+    function aggregateTestAdmissions(records) {
+        const out = [];
+        const byRef = new Map();
+        for (const r of records) {
+            if (r.type !== 'test-admission' || !r.reference) { out.push(r); continue; }
+            const acc = byRef.get(r.reference);
+            if (acc) {
+                acc.quantity = (acc.quantity || 0) + (r.quantity || 0);
+                acc.total = (acc.quantity || 0) * (acc.price || 0);
+            } else {
+                const copy = { ...r };
+                byRef.set(r.reference, copy);
+                out.push(copy);
+            }
+        }
+        return out;
+    }
+
     return {
         parsePreview,
         parseFull,
@@ -403,6 +437,7 @@ const CSVParser = (() => {
         getMapping,
         detectMapping,
         isNonStoreDept,
+        aggregateTestAdmissions,
         // Funciones internas expuestas solo para tests. No usar desde la app.
         _internals: { mapRecord, normalizeDate }
     };

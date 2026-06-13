@@ -11,8 +11,6 @@
     <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script>
     <!-- Pako for gzip compression of backups -->
     <script src="https://unpkg.com/pako@2.1.0/dist/pako.min.js"></script>
-    <!-- Chart.js for evolution graphs -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="https://apis.google.com/js/api.js" defer></script>
     <!-- Google Identity Services: login con Google (Fase 4b) -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -133,8 +131,15 @@
             </div>
             <div class="coverage-standalone">
                 <div class="home-summary-card">
-                    <div id="coverage-bars"></div>
+                    <div class="coverage-crumbs" id="coverage-crumbs"></div>
+                    <div class="coverage-grid-scroll"><div id="coverage-grid"></div></div>
+                    <div class="coverage-legend" id="coverage-legend"></div>
+                    <div class="coverage-hint" id="coverage-hint"></div>
                     <div class="coverage-empty hidden" id="coverage-empty">Sin datos importados</div>
+                </div>
+                <div class="home-summary-card coverage-summary-card hidden" id="coverage-summary-card">
+                    <h3 class="coverage-summary-title">Resumen</h3>
+                    <div class="coverage-callouts" id="coverage-summary"></div>
                 </div>
             </div>
         </section>
@@ -604,6 +609,7 @@
             <div class="section-header">
                 <h2>Vista por tienda</h2>
                 <div class="available-weeks" id="evo-available"></div>
+                <div class="week-range-error hidden" id="evo-range-error"></div>
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
 
@@ -611,12 +617,16 @@
                 <div class="kpi-panel-header">
                     <h3 class="kpi-panel-title">Evolucion semanal</h3>
                     <div class="kpi-panel-filters">
+                        <div class="segmented evo-tabs">
+                            <button type="button" class="segmented-btn active" data-evo-tab="stores">Comparar tiendas</button>
+                            <button type="button" class="segmented-btn" data-evo-tab="single">Una tienda</button>
+                        </div>
                         <label class="filter-label">De W</label>
-                        <input type="number" id="evo-week-from" class="week-input" min="1" value="">
-                        <span class="week-input-year" id="evo-week-from-year"></span>
+                        <input type="number" id="evo-week-from" class="week-input" min="1" max="52" value="">
+                        <input type="number" id="evo-week-from-year" class="week-year-input" min="2025" value="">
                         <label class="filter-label">a W</label>
-                        <input type="number" id="evo-week-to" class="week-input" min="1" value="">
-                        <span class="week-input-year" id="evo-week-to-year"></span>
+                        <input type="number" id="evo-week-to" class="week-input" min="1" max="52" value="">
+                        <input type="number" id="evo-week-to-year" class="week-year-input" min="2025" value="">
                         <select id="evo-metric" class="evo-single-only">
                             <optgroup label="Ventas">
                                 <option value="netSales">Ventas netas (&euro;)</option>
@@ -692,8 +702,8 @@
                             <option value="10">Top 10</option>
                             <option value="20">Top 20</option>
                         </select>
-                        <div class="search-select" id="kpi-panel-store-wrap">
-                            <input type="text" class="search-select-input" id="kpi-panel-store" placeholder="Todas las tiendas" value="">
+                        <div class="search-select evo-compare-only hidden" id="kpi-panel-store-wrap">
+                            <input type="text" class="search-select-input" id="kpi-panel-store" placeholder="Elige una tienda" value="">
                             <div class="search-select-dropdown" id="kpi-panel-store-list"></div>
                         </div>
                     </div>
@@ -712,22 +722,6 @@
                         </table>
                     </div>
                 </div>
-
-                <!-- Chart (toggleable) -->
-                <div class="evo-chart-toggle">
-                    <button class="btn btn-secondary btn-sm" id="btn-toggle-chart">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-                        Grafico
-                    </button>
-                    <span class="evo-chart-info" id="evo-chart-info" data-tip="">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                    </span>
-                </div>
-                <div class="evo-chart-section collapsed" id="evo-chart-section">
-                    <div class="evo-chart-container">
-                        <canvas id="evo-chart"></canvas>
-                    </div>
-                </div>
             </div>
         </section>
 
@@ -736,6 +730,7 @@
             <div class="section-header">
                 <h2>Vista general</h2>
                 <div class="available-weeks" id="dg-available"></div>
+                <div class="week-range-error hidden" id="dg-range-error"></div>
                 <button class="btn btn-secondary btn-back" data-action="go-home">Volver al inicio</button>
             </div>
             <div class="kpi-panel">
@@ -743,11 +738,11 @@
                     <h3 class="kpi-panel-title">Tiendas &times; KPIs</h3>
                     <div class="kpi-panel-filters">
                         <label class="filter-label">De W</label>
-                        <input type="number" id="dg-week-from" class="week-input" min="1" value="">
-                        <span class="week-input-year" id="dg-week-from-year"></span>
+                        <input type="number" id="dg-week-from" class="week-input" min="1" max="52" value="">
+                        <input type="number" id="dg-week-from-year" class="week-year-input" min="2025" value="">
                         <label class="filter-label">a W</label>
-                        <input type="number" id="dg-week-to" class="week-input" min="1" value="">
-                        <span class="week-input-year" id="dg-week-to-year"></span>
+                        <input type="number" id="dg-week-to" class="week-input" min="1" max="52" value="">
+                        <input type="number" id="dg-week-to-year" class="week-year-input" min="2025" value="">
                         <div class="multi-select" data-key="dg-kpis">
                             <button type="button" class="multi-select-trigger" id="dg-kpi-trigger">
                                 <span class="multi-select-label">KPIs</span>
@@ -944,6 +939,7 @@
     <script src="js/modules/database.js"></script>
     <script src="js/modules/csv-parser.js"></script>
     <script src="js/modules/kpi-engine.js"></script>
+    <script src="js/modules/coverage-model.js"></script>
     <!-- Global progress bar -->
     <div id="import-progress" class="progress-overlay hidden">
         <div class="progress-overlay-box">

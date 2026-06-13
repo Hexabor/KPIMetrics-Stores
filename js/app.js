@@ -133,8 +133,8 @@ const App = (() => {
         // Vista por tienda filters (evolucion semanal unificada)
         document.getElementById('evo-week-from').addEventListener('change', refreshEvolution);
         document.getElementById('evo-week-to').addEventListener('change', refreshEvolution);
-        document.getElementById('evo-week-from').addEventListener('input', e => setWeekInputYear('evo-week-from-year', e.target.value));
-        document.getElementById('evo-week-to').addEventListener('input', e => setWeekInputYear('evo-week-to-year', e.target.value));
+        document.getElementById('evo-week-from-year').addEventListener('change', refreshEvolution);
+        document.getElementById('evo-week-to-year').addEventListener('change', refreshEvolution);
         document.getElementById('evo-metric').addEventListener('change', () => {
             const m = document.getElementById('evo-metric').value;
             document.getElementById('evo-min-ops').disabled = !METRICS[m]?.isPct;
@@ -146,9 +146,12 @@ const App = (() => {
         updateEvoMetricInfo();
         document.getElementById('evo-min-ops').addEventListener('change', refreshEvolution);
 
-        // Top N + chart toggle
+        // Top N
         document.getElementById('evo-top-n').addEventListener('change', refreshEvolution);
-        document.getElementById('btn-toggle-chart').addEventListener('click', toggleEvoChart);
+        // Pestañas: Comparar tiendas / Una tienda
+        document.querySelectorAll('#section-dash-store [data-evo-tab]').forEach(btn => {
+            btn.addEventListener('click', () => setEvoTab(btn.dataset.evoTab));
+        });
 
         // KPI multi-select (compare mode)
         initEvoKpiMultiSelect();
@@ -156,8 +159,8 @@ const App = (() => {
         // Dashboard: general
         document.getElementById('dg-week-from').addEventListener('change', refreshDashGeneral);
         document.getElementById('dg-week-to').addEventListener('change', refreshDashGeneral);
-        document.getElementById('dg-week-from').addEventListener('input', e => setWeekInputYear('dg-week-from-year', e.target.value));
-        document.getElementById('dg-week-to').addEventListener('input', e => setWeekInputYear('dg-week-to-year', e.target.value));
+        document.getElementById('dg-week-from-year').addEventListener('change', refreshDashGeneral);
+        document.getElementById('dg-week-to-year').addEventListener('change', refreshDashGeneral);
 
         // Dashboard: detail
         document.getElementById('dd-week-from').addEventListener('change', refreshDashDetail);
@@ -274,6 +277,33 @@ const App = (() => {
         updateTopbarWeek();
     }
 
+    // ============================
+    // COBERTURA v2 (rejilla Fuente×Semana + drill-down + resumen accionable)
+    // La logica de presencia/huecos/frescura/parcialidad vive en CoverageModel
+    // (modulo puro testeado). Aqui solo se renderiza y se navega.
+    // ============================
+    const COV_LABELS = {
+        'baby-banking': 'Baby Banking ES', 'baby-banking-ic': 'Baby Banking IC',
+        'ecom': 'Ecom Sales', 'captacion': 'Captación',
+        'attachment': 'Attachment ES', 'attachment-ic': 'Attachment IC', 'stocks': 'Stocks (AIO)'
+    };
+    const COV_COLORS = {
+        'baby-banking': '#3b82f6', 'baby-banking-ic': '#0ea5e9', 'ecom': '#8b5cf6',
+        'captacion': '#f59e0b', 'attachment': '#ec4899', 'attachment-ic': '#d946a6', 'stocks': '#10b981'
+    };
+    const COV_DAYNAMES = ['Sáb', 'Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie'];
+    const COV_ICONS = {
+        tri: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>',
+        clock: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+        cal: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg>',
+        check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2"><path d="M20 6 9 17l-5-5"/></svg>'
+    };
+
+    let covModel = null;        // modelo cacheado (CoverageModel.buildCoverageModel)
+    let covOps = [];            // referencia a operations para el nivel dia
+    let covToday = 0;           // semana lineal de hoy
+    const covState = { level: 1, src: null, store: null };
+
     // Cobertura: ahora vive en su propia seccion (consulta, admin y viewer).
     async function refreshCoverage() {
         const stores = await Database.getDistinctValues('store');
@@ -283,97 +313,233 @@ const App = (() => {
             else if (stores.length === 1) storeCountEl.textContent = `· ${stores[0]}`;
             else storeCountEl.textContent = `· ${stores.length} tiendas`;
         }
-        await renderCoverageBars();
+
+        covOps = await Database.getAllOperations();
+        const attachment = await Database.getAllAttachmentWeekly();
+        const imports = await Database.getImportHistory();
+        const ecomImports = imports.filter(i => i.source === 'ecom');
+        covToday = KPIEngine.helpers.businessWeek(new Date().toISOString().substring(0, 10));
+        covModel = CoverageModel.buildCoverageModel({ operations: covOps, attachment, ecomImports }, covToday);
+
+        covState.level = 1; covState.src = null; covState.store = null;
+        renderCoverage();
     }
 
-    async function renderCoverageBars() {
-        const container = document.getElementById('coverage-bars');
-        const emptyMsg = document.getElementById('coverage-empty');
-        const ranges = await Database.getDateRangeBySource();
-
-        // Attachment vive en su propia tabla y solo tiene (cycleYear, week).
-        // Convertimos su rango de semanas a fechas sabado-viernes usando el
-        // calendario CeX para que la barra encaje con las demas fuentes.
-        try {
-            const attachRows = await Database.getAllAttachmentWeekly();
-            if (attachRows.length) {
-                const courseStart = KPIEngine.getCourseStart();
-                const cs = courseStart.split('-');
-                const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
-                const weekToDateRange = (w) => {
-                    const fromMs = startMs + (w - 1) * 7 * 86400000;
-                    const toMs = fromMs + 6 * 86400000;
-                    return {
-                        from: new Date(fromMs).toISOString().substring(0, 10),
-                        to: new Date(toMs).toISOString().substring(0, 10)
-                    };
-                };
-                const bySrc = {};
-                for (const a of attachRows) {
-                    if (!bySrc[a.source]) bySrc[a.source] = { wkMin: a.week, wkMax: a.week };
-                    if (a.week < bySrc[a.source].wkMin) bySrc[a.source].wkMin = a.week;
-                    if (a.week > bySrc[a.source].wkMax) bySrc[a.source].wkMax = a.week;
-                }
-                for (const [src, r] of Object.entries(bySrc)) {
-                    const fromR = weekToDateRange(r.wkMin);
-                    const toR = weekToDateRange(r.wkMax);
-                    ranges[src] = { from: fromR.from, to: toR.to };
-                }
-            }
-        } catch (e) {
-            console.warn('Coverage attachment range failed:', e);
-        }
-
-        const sources = {
-            'baby-banking': { label: 'Baby Banking ES', cssClass: 'coverage-bar-bb' },
-            'baby-banking-ic': { label: 'Baby Banking IC', cssClass: 'coverage-bar-bb-ic' },
-            'ecom': { label: 'Ecom Sales', cssClass: 'coverage-bar-ecom' },
-            'captacion': { label: 'Captacion de socios', cssClass: 'coverage-bar-captacion' },
-            'attachment': { label: 'Attachment ES', cssClass: 'coverage-bar-attachment' },
-            'attachment-ic': { label: 'Attachment IC', cssClass: 'coverage-bar-attachment' },
-            'stocks': { label: 'Stocks (AIO)', cssClass: 'coverage-bar-stocks' }
-        };
-
-        // Find global min/max
-        let globalMin = null, globalMax = null;
-        for (const src of Object.keys(sources)) {
-            const r = ranges[src];
-            if (!r) continue;
-            if (!globalMin || r.from < globalMin) globalMin = r.from;
-            if (!globalMax || r.to > globalMax) globalMax = r.to;
-        }
-
-        if (!globalMin) {
-            container.innerHTML = '';
-            emptyMsg.classList.remove('hidden');
+    function renderCoverage() {
+        const grid = document.getElementById('coverage-grid');
+        const empty = document.getElementById('coverage-empty');
+        if (!covModel || !covModel.sources.length) {
+            grid.innerHTML = '';
+            document.getElementById('coverage-crumbs').innerHTML = '';
+            document.getElementById('coverage-legend').innerHTML = '';
+            document.getElementById('coverage-hint').textContent = '';
+            document.getElementById('coverage-summary-card').classList.add('hidden');
+            empty.classList.remove('hidden');
             return;
         }
-        emptyMsg.classList.add('hidden');
+        empty.classList.add('hidden');
+        renderCoverageCrumbs();
+        if (covState.level === 1) renderCovLevel1();
+        else if (covState.level === 2) renderCovLevel2();
+        else renderCovLevel3();
+        renderCoverageSummary();
+        wireCoverageGrid();
+    }
 
-        const minMs = new Date(globalMin + 'T00:00:00').getTime();
-        const maxMs = new Date(globalMax + 'T00:00:00').getTime();
-        const span = maxMs - minMs || 1;
-
-        let html = '';
-        for (const [src, meta] of Object.entries(sources)) {
-            const r = ranges[src];
-            const leftPct = r ? ((new Date(r.from + 'T00:00:00').getTime() - minMs) / span * 100) : 0;
-            const rightPct = r ? ((new Date(r.to + 'T00:00:00').getTime() - minMs) / span * 100) : 0;
-            const widthPct = r ? Math.max(rightPct - leftPct, 1) : 0;
-
-            html += `<div class="coverage-row">
-                <div class="coverage-bar-title" style="margin-left:${r ? leftPct : 0}%;width:${r ? widthPct : 100}%">${meta.label}${r ? '' : ' — sin datos'}</div>
-                <div class="coverage-track">
-                    ${r ? `<div class="coverage-bar ${meta.cssClass}" style="left:${leftPct}%;width:${widthPct}%"></div>` : ''}
-                </div>
-                ${r ? `<div class="coverage-dates" style="margin-left:${leftPct}%;width:${widthPct}%">
-                    <span>${UI.formatDate(r.from)}</span>
-                    <span>${UI.formatDate(r.to)}</span>
-                </div>` : ''}
-            </div>`;
+    // --- breadcrumb ---
+    function renderCoverageCrumbs() {
+        const el = document.getElementById('coverage-crumbs');
+        let h = `<span class="cov-crumb${covState.level === 1 ? ' current' : ''}" data-go="1">Cobertura</span>`;
+        if (covState.level >= 2) {
+            h += `<span class="cov-crumb-sep">▸</span><span class="cov-crumb${covState.level === 2 ? ' current' : ''}" data-go="2">${COV_LABELS[covState.src] || covState.src}</span>`;
         }
+        if (covState.level >= 3) {
+            h += `<span class="cov-crumb-sep">▸</span><span class="cov-crumb current">${covState.store}</span>`;
+        }
+        el.innerHTML = h;
+        el.querySelectorAll('[data-go]').forEach(c => c.addEventListener('click', () => {
+            const lvl = +c.dataset.go;
+            if (lvl < covState.level) {
+                covState.level = lvl;
+                if (lvl < 3) covState.store = null;
+                if (lvl < 2) covState.src = null;
+                renderCoverage();
+            }
+        }));
+    }
 
-        container.innerHTML = html;
+    // --- helpers de rejilla ---
+    function covWeekCols() {
+        const cols = [];
+        for (let w = covModel.colMin; w <= covModel.colMax; w++) cols.push(w);
+        return cols;
+    }
+    function covHeadRow(labels) {
+        let h = '<div class="cov-cell head"></div>';
+        for (const l of labels) h += `<div class="cov-cell head">${l}</div>`;
+        return h;
+    }
+    // Cabeceras de semana: "Wxx" y el año solo cuando cambia (compacto).
+    function covWeekHeaders(cols) {
+        const wy = KPIEngine.helpers.weekYear;
+        let prev = null;
+        return cols.map(w => {
+            const { week, year } = wy(w);
+            const showYear = year !== prev; prev = year;
+            return showYear ? `W${week}<br><span class="cov-yr">${year}</span>` : `W${week}`;
+        });
+    }
+    // Una celda de semana clasificada por el modelo (present/gap/future/pending/leading).
+    function covWeekCell(weeksSet, wk, color, attrs) {
+        const cls = CoverageModel.classifyWeek(weeksSet, wk, covToday);
+        if (cls === 'present') return `<div class="cov-cell" ${attrs} style="background:${color}">✓</div>`;
+        if (cls === 'gap') return `<div class="cov-cell miss alert" ${attrs} title="Hueco interno — probable olvido">!</div>`;
+        if (cls === 'future') return `<div class="cov-cell future" ${attrs}></div>`;
+        return `<div class="cov-cell miss" ${attrs}></div>`; // leading | pending
+    }
+
+    // --- Nivel 1: Fuente × Semana ---
+    function renderCovLevel1() {
+        const cols = covWeekCols();
+        let h = `<div class="cov-grid" style="grid-template-columns:170px repeat(${cols.length},minmax(34px,1fr))">`;
+        h += covHeadRow(covWeekHeaders(cols));
+        covModel.sources.forEach((s, ri) => {
+            const drillable = s.hasStore;
+            const rk = 's' + ri;
+            const attrs = drillable ? `data-row="${rk}" data-drill="${s.key}" data-kind="src"` : `data-row="${rk}"`;
+            h += `<div class="cov-cell rowhead ${drillable ? 'click' : ''}" ${attrs}>${COV_LABELS[s.key] || s.key}</div>`;
+            for (const wk of cols) h += covWeekCell(s.weeks, wk, COV_COLORS[s.key] || '#3b82f6', attrs);
+        });
+        h += '</div>';
+        document.getElementById('coverage-grid').innerHTML = h;
+        covLegend(['present', 'dash', 'alert', 'future']);
+        document.getElementById('coverage-hint').textContent =
+            'Clica una fuente con "›" para ver el desglose por tienda. Ecom y Stocks no bajan de nivel.';
+    }
+
+    // --- Nivel 2: Tienda × Semana (para una fuente) ---
+    function renderCovLevel2() {
+        const s = covModel.sources.find(x => x.key === covState.src);
+        if (!s) { covState.level = 1; return renderCoverage(); }
+        const cols = covWeekCols();
+        const stores = [...s.storeWeeks.keys()].sort((a, b) => a.localeCompare(b));
+        let h = `<div class="cov-grid" style="grid-template-columns:170px repeat(${cols.length},minmax(34px,1fr))">`;
+        h += covHeadRow(covWeekHeaders(cols));
+        stores.forEach((store, ri) => {
+            const weeksSet = s.storeWeeks.get(store);
+            const drillable = s.hasDay;
+            const rk = 't' + ri;
+            const attrs = drillable ? `data-row="${rk}" data-drill="${store}" data-kind="store"` : `data-row="${rk}"`;
+            h += `<div class="cov-cell rowhead ${drillable ? 'click' : ''}" ${attrs}>${store}</div>`;
+            for (const wk of cols) h += covWeekCell(weeksSet, wk, COV_COLORS[s.key] || '#3b82f6', attrs);
+        });
+        h += '</div>';
+        document.getElementById('coverage-grid').innerHTML = h;
+        covLegend(['present', 'dash', 'alert', 'future']);
+        document.getElementById('coverage-hint').textContent = s.hasDay
+            ? 'Clica una tienda con "›" para ver el calendario de días.'
+            : 'Esta fuente es semanal (sin día): el desglose llega a nivel tienda.';
+    }
+
+    // --- Nivel 3: calendario Semana × Día (para fuente + tienda) ---
+    function covDayPresence(src, store) {
+        const set = new Set();
+        for (const op of covOps) {
+            if (op.source === src && op.store === store && op.date) set.add(op.date);
+        }
+        return set;
+    }
+    function renderCovLevel3() {
+        const s = covModel.sources.find(x => x.key === covState.src);
+        const cols = covWeekCols();
+        const color = COV_COLORS[covState.src] || '#3b82f6';
+        const dateSet = covDayPresence(covState.src, covState.store);
+        const cs = KPIEngine.getCourseStart().split('-');
+        const startMs = Date.UTC(cs[0], cs[1] - 1, cs[2]);
+        const todayISO = new Date().toISOString().substring(0, 10);
+        const wyl = KPIEngine.helpers.weekYearLabel;
+
+        let h = `<div class="cov-grid" style="grid-template-columns:120px repeat(7,minmax(40px,1fr))">`;
+        h += covHeadRow(COV_DAYNAMES);
+        for (const wk of cols) {
+            h += `<div class="cov-cell rowhead">${wyl(wk)}</div>`;
+            for (let d = 0; d < 7; d++) {
+                const ms = startMs + ((wk - 1) * 7 + d) * 86400000;
+                const iso = new Date(ms).toISOString().substring(0, 10);
+                const dd = iso.substring(8, 10) + '/' + iso.substring(5, 7);
+                if (dateSet.has(iso)) h += `<div class="cov-cell day" style="background:${color}" title="${UI.formatDate(iso)}">${dd}</div>`;
+                else if (iso > todayISO) h += `<div class="cov-cell day future" title="${UI.formatDate(iso)} (futuro)">${dd}</div>`;
+                else h += `<div class="cov-cell day miss" style="color:var(--color-text-lighter)" title="${UI.formatDate(iso)} (sin datos)">${dd}</div>`;
+            }
+        }
+        h += '</div>';
+        document.getElementById('coverage-grid').innerHTML = h;
+        covLegend(['present', 'dashday', 'future']);
+        document.getElementById('coverage-hint').textContent =
+            'Día vacío = gris, SIN alerta (no asumimos festivos ni domingos). Un día laborable vacío puede indicar una importación incompleta.';
+    }
+
+    // --- leyenda ---
+    function covLegend(keys) {
+        const map = {
+            present: '<span><i class="cov-dot" style="background:#3b82f6"></i> con datos</span>',
+            dash: '<span><i class="cov-dot dash"></i> hueco / fuera de rango</span>',
+            dashday: '<span><i class="cov-dot dash"></i> día sin datos (interpretas tú)</span>',
+            alert: '<span><i class="cov-dot alert"></i> hueco interno (probable olvido)</span>',
+            future: '<span><i class="cov-dot future"></i> futuro / pendiente</span>'
+        };
+        document.getElementById('coverage-legend').innerHTML = keys.map(k => map[k]).join('');
+    }
+
+    // --- delegacion de eventos (una sola vez) ---
+    function wireCoverageGrid() {
+        const grid = document.getElementById('coverage-grid');
+        if (grid.dataset.wired) return;
+        grid.dataset.wired = '1';
+        grid.addEventListener('click', e => {
+            const cell = e.target.closest('[data-drill]');
+            if (!cell) return;
+            if (cell.dataset.kind === 'src') { covState.level = 2; covState.src = cell.dataset.drill; renderCoverage(); }
+            else if (cell.dataset.kind === 'store') { covState.level = 3; covState.store = cell.dataset.drill; renderCoverage(); }
+        });
+        grid.addEventListener('mouseover', e => {
+            covClearHl();
+            const cell = e.target.closest('[data-drill]');
+            if (cell) grid.querySelectorAll(`[data-row="${cell.dataset.row}"]`).forEach(c => c.classList.add('hl'));
+        });
+        grid.addEventListener('mouseleave', covClearHl);
+    }
+    function covClearHl() {
+        document.getElementById('coverage-grid').querySelectorAll('.hl').forEach(c => c.classList.remove('hl'));
+    }
+
+    // --- resumen accionable ---
+    function renderCoverageSummary() {
+        const card = document.getElementById('coverage-summary-card');
+        const box = document.getElementById('coverage-summary');
+        const wyl = KPIEngine.helpers.weekYearLabel;
+        const items = [];
+        for (const s of covModel.sources) {
+            const label = COV_LABELS[s.key] || s.key;
+            let healthy = true;
+            if (s.gaps.length) {
+                healthy = false;
+                items.push({ type: 'warn', icon: 'tri', html: `<b>Hueco interno · ${label}:</b> falta ${s.gaps.map(wyl).join(', ')} (rodeada${s.gaps.length > 1 ? 's' : ''} de semanas con datos).` });
+            }
+            if (s.staleness >= 1) {
+                healthy = false;
+                const n = s.staleness;
+                items.push({ type: 'warn', icon: 'clock', html: `<b>Desactualizado · ${label}:</b> última semana subida ${wyl(s.maxWeek)}; ${n} semana${n > 1 ? 's' : ''} terminada${n > 1 ? 's' : ''} sin subir (la semana en curso no cuenta).` });
+            }
+            for (const p of s.partials) {
+                healthy = false;
+                items.push({ type: 'warn', icon: 'cal', html: `<b>Cobertura parcial · ${wyl(p.week)} ${label}:</b> faltan ${p.missing.length} de ${p.expected} tiendas (${p.missing.join(', ')}).` });
+            }
+            if (healthy) items.push({ type: 'ok', icon: 'check', html: `<b>${label}:</b> al día (última ${wyl(s.maxWeek)}).` });
+        }
+        if (!items.length) { card.classList.add('hidden'); return; }
+        card.classList.remove('hidden');
+        box.innerHTML = items.map(it => `<div class="cov-callout ${it.type}">${COV_ICONS[it.icon]}<div>${it.html}</div></div>`).join('');
     }
 
     // ============================
@@ -480,16 +646,20 @@ const App = (() => {
             .filter(s => !CSVParser.isNonStoreDept(s));
         populateStoreSelect('kpi-panel-store', stores);
 
-        const fromEl = document.getElementById('evo-week-from');
-        const toEl = document.getElementById('evo-week-to');
-
         const savedFrom = await Database.getSetting('evoWeekFrom');
         const savedTo = await Database.getSetting('evoWeekTo');
-        if (savedFrom && savedTo) {
-            fromEl.value = savedFrom;
-            toEl.value = savedTo;
+        if (Number.isFinite(savedFrom) && Number.isFinite(savedTo)) {
+            setWeekInputs('evo-week-from', 'evo-week-from-year', savedFrom);
+            setWeekInputs('evo-week-to', 'evo-week-to-year', savedTo);
         }
         // If no saved range, refreshEvolution will auto-fill from available data.
+
+        // Pestaña recordada (Comparar tiendas por defecto).
+        const savedTab = await Database.getSetting('evoTab');
+        evoState.tab = savedTab === 'single' ? 'single' : 'stores';
+        document.querySelectorAll('#section-dash-store [data-evo-tab]').forEach(b => {
+            b.classList.toggle('active', b.dataset.evoTab === evoState.tab);
+        });
 
         refreshEvolution();
     }
@@ -1114,8 +1284,8 @@ const App = (() => {
         metric: 'netSales',
         sortCol: null,
         sortDir: 'desc',
-        selectedRow: null,  // clicked row for chart highlight
-        // Compare-KPIs mode
+        tab: 'stores',            // 'stores' = tiendas×semanas (un KPI) | 'single' = una tienda × KPIs
+        // Compare-KPIs mode (derivado de tab === 'single')
         compareMode: false,
         compareSubject: null,     // store name when a single store is fixed
         compareWeekData: null,    // {weekN: bucket} for that subject
@@ -1222,58 +1392,28 @@ const App = (() => {
         renderEvoKpiList();
     }
 
+    // Cambia de pestaña (Comparar tiendas / Una tienda), persiste y refresca.
+    function setEvoTab(tab) {
+        if (tab !== 'stores' && tab !== 'single') return;
+        evoState.tab = tab;
+        document.querySelectorAll('#section-dash-store [data-evo-tab]').forEach(b => {
+            b.classList.toggle('active', b.dataset.evoTab === tab);
+        });
+        saveViewSetting('evoTab', tab);
+        refreshEvolution();
+    }
+
     function updateEvoModeVisibility() {
-        const compare = !!evoState.compareMode;
+        const compare = evoState.tab === 'single';
         document.querySelectorAll('#section-dash-store .evo-single-only').forEach(el => {
             el.classList.toggle('hidden', compare);
         });
         document.querySelectorAll('#section-dash-store .evo-compare-only').forEach(el => {
             el.classList.toggle('hidden', !compare);
         });
-        const chartBtn = document.getElementById('btn-toggle-chart');
-        const chartSection = document.getElementById('evo-chart-section');
-        if (chartBtn) {
-            chartBtn.disabled = compare;
-            chartBtn.title = compare ? 'No aplica al comparar KPIs (usa las sparklines por fila)' : '';
-        }
-        if (compare && chartSection) chartSection.classList.add('collapsed');
-    }
-
-    function renderSparkline(values, width, height) {
-        width = width || 120;
-        height = height || 22;
-        const nums = values.map(v => (typeof v === 'number' && isFinite(v)) ? v : null);
-        const valid = nums.filter(v => v !== null);
-        if (valid.length < 2) {
-            return `<svg class="evo-sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}"></svg>`;
-        }
-        const min = Math.min.apply(null, valid);
-        const max = Math.max.apply(null, valid);
-        const range = max - min || 1;
-        const pad = 2;
-        const innerW = width - pad * 2;
-        const innerH = height - pad * 2;
-        const step = nums.length > 1 ? innerW / (nums.length - 1) : 0;
-        const pointY = (v) => pad + innerH - ((v - min) / range) * innerH;
-        const segs = [];
-        let cur = [];
-        nums.forEach((v, i) => {
-            if (v === null) {
-                if (cur.length > 1) segs.push(cur);
-                cur = [];
-            } else {
-                cur.push(`${(pad + i * step).toFixed(1)},${pointY(v).toFixed(1)}`);
-            }
-        });
-        if (cur.length > 1) segs.push(cur);
-        let svgInner = segs.map(s => `<polyline points="${s.join(' ')}" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />`).join('');
-        for (let i = nums.length - 1; i >= 0; i--) {
-            if (nums[i] !== null) {
-                svgInner += `<circle cx="${(pad + i * step).toFixed(1)}" cy="${pointY(nums[i]).toFixed(1)}" r="2" fill="currentColor" />`;
-                break;
-            }
-        }
-        return `<svg class="evo-sparkline" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${svgInner}</svg>`;
+        // En "Una tienda" el selector exige elegir una; ajusta el placeholder.
+        const storeInput = document.getElementById('kpi-panel-store');
+        if (storeInput) storeInput.placeholder = compare ? 'Elige una tienda' : 'Todas las tiendas';
     }
 
     // Dashboard: General state (sort + store multi-select filter + column selection)
@@ -1352,27 +1492,26 @@ const App = (() => {
 
     async function refreshEvolution() {
         const available = await updateAvailableWeeksLabel('evo-available');
-        const fromEl = document.getElementById('evo-week-from');
-        const toEl = document.getElementById('evo-week-to');
-        if (!parseInt(toEl.value) || parseInt(toEl.value) < 1) {
+        let weekFrom = readWeekInput('evo-week-from', 'evo-week-from-year');
+        let weekTo = readWeekInput('evo-week-to', 'evo-week-to-year');
+        if (!Number.isFinite(weekTo)) {
             if (available) {
-                fromEl.value = available.weekMin;
-                toEl.value = available.weekMax;
+                weekFrom = available.weekMin;
+                weekTo = available.weekMax;
             } else {
                 const today = new Date().toISOString().substring(0, 10);
                 const currentWeek = KPIEngine.helpers.businessWeek(today);
-                fromEl.value = Math.max(1, currentWeek - 3);
-                toEl.value = currentWeek;
+                weekFrom = Math.max(1, currentWeek - 3);
+                weekTo = currentWeek;
             }
         }
-        const weekFrom = parseInt(fromEl.value) || 1;
-        const weekTo = parseInt(toEl.value) || weekFrom;
+        if (!Number.isFinite(weekFrom)) weekFrom = weekTo;
         evoState.metric = document.getElementById('evo-metric').value;
-        const store = getStoreValue('kpi-panel-store');
 
-        // Compare-KPIs mode: active when a single store is fixed
-        const compareSubject = store && store !== 'all' ? store : null;
-        evoState.compareMode = !!compareSubject;
+        // El modo lo decide la pestaña: 'single' compara KPIs de UNA tienda.
+        evoState.compareMode = evoState.tab === 'single';
+        const store = getStoreValue('kpi-panel-store');
+        const compareSubject = (evoState.compareMode && store && store !== 'all') ? store : null;
         evoState.compareSubject = compareSubject;
         if (!evoState.selectedKpis) {
             evoState.selectedKpis = new Set(defaultCompareKpis());
@@ -1381,8 +1520,8 @@ const App = (() => {
         updateEvoModeVisibility();
 
         // Persist week range
-        await Database.setSetting('evoWeekFrom', weekFrom);
-        await Database.setSetting('evoWeekTo', weekTo);
+        await saveViewSetting('evoWeekFrom', weekFrom);
+        await saveViewSetting('evoWeekTo', weekTo);
 
         // Week range label
         const courseStart = KPIEngine.getCourseStart();
@@ -1395,8 +1534,9 @@ const App = (() => {
             weekFrom === weekTo
                 ? `${wyl(weekFrom)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`
                 : `${wyl(weekFrom)} → ${wyl(weekTo)} (${UI.formatDate(fromDate)} - ${UI.formatDate(toDate)})`;
-        setWeekInputYear('evo-week-from-year', weekFrom);
-        setWeekInputYear('evo-week-to-year', weekTo);
+        setWeekInputs('evo-week-from', 'evo-week-from-year', weekFrom);
+        setWeekInputs('evo-week-to', 'evo-week-to-year', weekTo);
+        setWeekRangeError('evo-range-error', weekFrom > weekTo);
 
         // Reset sort on data change
         evoState.sortCol = null;
@@ -1413,14 +1553,23 @@ const App = (() => {
 
         const allData = await Database.getAllOperations();
         let records = allData;
-        if (store && store !== 'all') {
-            records = records.filter(r => r.store === store);
+        // En "Una tienda" se filtra a la tienda elegida; en "Comparar tiendas"
+        // siempre son todas (el selector de tienda no aplica ahi).
+        if (evoState.compareMode && compareSubject) {
+            records = records.filter(r => r.store === compareSubject);
         }
         // Ecom filtering is per-KPI (see Configuracion): buckets store both
         // variants, metrics pick the right one. No record-level filter here.
 
         // Compare-KPIs branch: aggregate one bucket per week for the fixed store
         if (evoState.compareMode) {
+            if (!compareSubject) {
+                document.getElementById('evo-thead').innerHTML = '<tr><th>--</th></tr>';
+                document.getElementById('evo-tbody').innerHTML =
+                    '<tr><td class="empty-msg">Elige una tienda para ver la evolucion de sus KPIs.</td></tr>';
+                document.getElementById('evo-tfoot').innerHTML = '';
+                return;
+            }
             evoState.compareWeekData = {};
             for (const r of records) {
                 const wk = r.week;
@@ -1480,10 +1629,6 @@ const App = (() => {
             evoState.sortDir = 'desc';
         }
         renderEvolution();
-        // Re-rank chart if visible
-        if (!document.getElementById('evo-chart-section').classList.contains('collapsed')) {
-            renderEvoChart();
-        }
     }
 
     function evoSortValue(name, col, metric, weeks) {
@@ -1531,11 +1676,10 @@ const App = (() => {
         const tfoot = document.getElementById('evo-tfoot');
 
         const selectedKeys = metricKeysFor('dashStore').filter(k => evoState.selectedKpis.has(k));
-        const colCount = weeks.length + 3;
+        const colCount = weeks.length + 2;
 
         thead.innerHTML = `<tr>
             <th>KPI <span class="col-subject-hint">(Tienda: ${escapeHtml(compareSubject)})</span></th>
-            <th class="col-spark">Evolucion</th>
             ${weeks.map(w => { const wy = KPIEngine.helpers.weekYear(w); return `<th>W${wy.week} <small class="th-year">${String(wy.year).slice(2)}</small></th>`; }).join('')}
             <th class="col-total"><strong>Total</strong></th>
         </tr>`;
@@ -1564,12 +1708,6 @@ const App = (() => {
             const def = METRICS[mk];
             const lbl = DG_COLUMN_LABELS[mk];
             const tooltip = lbl ? lbl.title : def.label;
-            const rawVals = weekBuckets.map(b => {
-                if (!b) return null;
-                if (def.isPct && def.minOpsOf && def.minOpsOf(b) === 0) return null;
-                return def.value(b);
-            });
-            const spark = renderSparkline(rawVals);
             const cells = weekBuckets.map(b => {
                 if (!b) return `<td class="cell-empty">${def.isPct ? '--' : (def.isCurrency ? formatCurrency(0) : '0')}</td>`;
                 return `<td>${def.format(def.value(b), b)}</td>`;
@@ -1579,7 +1717,6 @@ const App = (() => {
             const totalCell = def.format(def.value(totalBucket), totalBucket);
             return `<tr>
                 <td class="evo-kpi-name" title="${escapeHtml(tooltip)}">${escapeHtml(def.label)}</td>
-                <td class="col-spark">${spark}</td>
                 ${cells}
                 <td class="col-total"><strong>${totalCell}</strong></td>
             </tr>`;
@@ -1656,8 +1793,7 @@ const App = (() => {
 
         tbody.innerHTML = rowNames.map((key, idx) => {
             const wd = rowWeekData[key];
-            const selected = evoState.selectedRow === key ? ' class="evo-row-selected"' : '';
-            return `<tr${selected} data-row="${escapeHtml(key)}">
+            return `<tr>
                 <td class="col-rank">${idx + 1}</td>
                 <td>${escapeHtml(key)}</td>
                 ${weeks.map(w => `<td>${evoCellValue(wd?.[w], metric)}</td>`).join('')}
@@ -1674,7 +1810,7 @@ const App = (() => {
                     if (c) mergeBuckets(colTotals[w], c);
                 }
             }
-            tfoot.innerHTML = `<tr data-row="__TOTAL__">
+            tfoot.innerHTML = `<tr>
                 <td class="col-rank"></td>
                 <td>TOTAL</td>
                 ${weeks.map(w => `<td><strong>${evoCellValue(colTotals[w], metric)}</strong></td>`).join('')}
@@ -1684,240 +1820,11 @@ const App = (() => {
             tfoot.innerHTML = '';
         }
 
-        // Click any row to select for chart
-        function selectRow(name, tr) {
-            evoState.selectedRow = evoState.selectedRow === name ? null : name;
-            const table = document.getElementById('evo-table');
-            table.querySelectorAll('tr').forEach(r => r.classList.remove('evo-row-selected'));
-            if (evoState.selectedRow) tr.classList.add('evo-row-selected');
-            const section = document.getElementById('evo-chart-section');
-            if (section.classList.contains('collapsed')) {
-                section.classList.remove('collapsed');
-                requestAnimationFrame(() => requestAnimationFrame(() => {
-                    try { renderEvoChart(); } catch(e) { console.error('Chart error:', e); }
-                }));
-            } else {
-                try { renderEvoChart(); } catch(e) { console.error('Chart error:', e); }
-            }
-        }
-
-        document.querySelectorAll('#evo-table tr[data-row]').forEach(tr => {
-            tr.style.cursor = 'pointer';
-            tr.addEventListener('click', () => selectRow(tr.dataset.row, tr));
-        });
-
         // Conditional gradient for absolute metrics
         if (metricDef && !metricDef.isPct) {
             const evoExtractor = (cell) => cell ? (metricDef.value(cell) || 0) : 0;
             applyHeatmap('evo-table', rowWeekData, weeks, evoExtractor);
         }
-
-        // Refresh chart if visible
-        if (!document.getElementById('evo-chart-section').classList.contains('collapsed')) {
-            renderEvoChart();
-        }
-    }
-
-    // ============================
-    // EVOLUTION CHART
-    // ============================
-    let evoChartInstance = null;
-
-    const CHART_METRIC_INFO = {
-        netSales: 'Ventas netas = ventas brutas - refunds',
-        grossSales: 'Suma de ventas (type=sale)',
-        refundsAmount: 'Importe de devoluciones (valor absoluto)',
-        totalItems: 'Unidades vendidas (lineas de venta)',
-        tickets: 'Numero de tickets unicos (Order Number distintos en sales)',
-        multiTickets: 'Tickets con mas de 1 linea',
-        pctMulti: '% Venta complementaria.\nNumerador: tickets con >1 linea\nDenominador: tickets totales',
-        avgItems: 'Media de articulos por ticket.\nNumerador: articulos\nDenominador: tickets',
-        pctServices: 'Porcentaje de geles (Services)\nvendidos por movil.\n\nNumerador: lineas Services\nDenominador: lineas Moviles',
-        pctBasics: 'Porcentaje de CeX Basics\nvendidos por movil.\n\nNumerador: lineas Basics\nDenominador: lineas Moviles',
-        pctCombo: 'Porcentaje combinado de\ngeles + basics por movil.\n\nNumerador: Services + Basics\nDenominador: lineas Moviles',
-        mobiles: 'Unidades de moviles vendidos\n(lineas con categoria "Moviles")',
-        mobilesTotal: 'Importe total de moviles vendidos',
-        services: 'Unidades de Services vendidos\n(lineas con categoria "Services")',
-        basics: 'Unidades de CeX Basics vendidos\n(lineas con categoria "basics")',
-        buys: 'Compras totales (cash buy + exchange) en valor absoluto',
-        cashBuys: 'Compras pagadas en efectivo',
-        exchanges: 'Compras pagadas en vale de tienda (mas rentables)',
-        pctVale: '% de compras pagadas en vale.\nNumerador: exchange EUR\nDenominador: cash buy + exchange EUR'
-    };
-
-    function toggleEvoChart() {
-        const section = document.getElementById('evo-chart-section');
-        const isCollapsed = section.classList.contains('collapsed');
-        if (isCollapsed) {
-            section.classList.remove('collapsed');
-            // Double rAF: first to apply display change, second to let layout compute
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    try { renderEvoChart(); }
-                    catch (e) { console.error('Chart render error:', e); }
-                });
-            });
-        } else {
-            section.classList.add('collapsed');
-        }
-    }
-
-    function renderEvoChart() {
-        if (typeof Chart === 'undefined') {
-            console.error('Chart.js not loaded');
-            return;
-        }
-
-        const chartMetric = evoState.metric;
-        const { rowWeekData, weeks } = evoState;
-
-        document.getElementById('evo-chart-info').dataset.tip = CHART_METRIC_INFO[chartMetric] || '';
-
-        const canvas = document.getElementById('evo-chart');
-        if (!canvas) { console.error('Canvas not found'); return; }
-
-        if (evoChartInstance) {
-            evoChartInstance.destroy();
-            evoChartInstance = null;
-        }
-
-        const allRows = Object.keys(rowWeekData);
-        if (weeks.length === 0 || allRows.length === 0) return;
-
-        // Ensure canvas has dimensions
-        const container = canvas.parentElement;
-        if (container.offsetHeight === 0) {
-            console.warn('Chart container has no height, skipping render');
-            return;
-        }
-
-        const labels = weeks.map(w => `W${w}`);
-        const metricDef = METRICS[chartMetric];
-        const isPct = !!metricDef?.isPct;
-        const isCurrency = !!metricDef?.isCurrency;
-        const topNVal = document.getElementById('evo-top-n').value;
-        const showTotal = allRows.length === 1;
-        const maxLines = topNVal === 'all' ? 999 : parseInt(topNVal) || 999;
-
-        const colors = [
-            '#2563eb', '#dc2626', '#16a34a', '#d97706', '#7c3aed',
-            '#db2777', '#0891b2', '#65a30d', '#ea580c', '#6366f1',
-            '#be123c', '#0d9488', '#c026d3', '#ca8a04', '#475569'
-        ];
-
-        // Aggregate total bucket across all rows for a week
-        const totalBucketAtWeek = (w) => {
-            const b = emptyBucket();
-            for (const name of allRows) {
-                const c = rowWeekData[name]?.[w];
-                if (c) mergeBuckets(b, c);
-            }
-            return b;
-        };
-
-        let datasets;
-
-        const selected = evoState.selectedRow;
-        if (selected === '__TOTAL__' || (showTotal && !selected)) {
-            const data = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
-            datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
-        } else if (selected && rowWeekData[selected] && !showTotal) {
-            const selData = weeks.map(w => evoChartValue(rowWeekData[selected]?.[w], chartMetric));
-            const totalData = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
-            datasets = [
-                { label: selected.split(' ').slice(0, 2).join(' '), data: selData, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 5, borderWidth: 3 },
-                { label: 'Total', data: totalData, borderColor: '#94a3b8', backgroundColor: 'transparent', tension: 0.3, pointRadius: 3, borderWidth: 1.5, borderDash: [4, 3] }
-            ];
-        } else if (showTotal) {
-            const data = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
-            datasets = [{ label: 'Total', data, borderColor: colors[0], backgroundColor: colors[0] + '20', tension: 0.3, fill: true, pointRadius: 4 }];
-        } else {
-            const rankCol = evoState.sortCol || 'total';
-            const ranked = allRows
-                .map(name => ({ name, val: evoSortValue(name, rankCol, chartMetric, weeks) }))
-                .sort((a, b) => b.val - a.val)
-                .slice(0, maxLines);
-
-            datasets = ranked.map(({ name }, i) => ({
-                label: name.split(' ').slice(0, 2).join(' '),
-                data: weeks.map(w => evoChartValue(rowWeekData[name]?.[w], chartMetric)),
-                borderColor: colors[i % colors.length],
-                backgroundColor: colors[i % colors.length] + '15',
-                tension: 0.3,
-                pointRadius: 3,
-                borderWidth: 2
-            }));
-
-            // Aggregate Total line for context (skip for pct: averaging makes no sense).
-            if (!isPct) {
-                const totalData = weeks.map(w => evoChartValue(totalBucketAtWeek(w), chartMetric));
-                datasets.push({
-                    label: 'Total',
-                    data: totalData,
-                    borderColor: '#64748b',
-                    backgroundColor: 'transparent',
-                    tension: 0.3,
-                    pointRadius: 3,
-                    borderWidth: 1.5,
-                    borderDash: [5, 4]
-                });
-            }
-        }
-
-        evoChartInstance = new Chart(canvas, {
-            type: 'line',
-            data: { labels, datasets },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                layout: { padding: 0 },
-                interaction: { mode: 'index', intersect: false },
-                plugins: {
-                    legend: {
-                        display: datasets.length > 1 && datasets.length <= 10,
-                        position: 'bottom',
-                        labels: { font: { size: 10 }, boxWidth: 12, padding: 8 }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(ctx) {
-                                const val = ctx.parsed.y;
-                                const suffix = isPct ? val + '%' : isCurrency ? formatCurrency(val) : val;
-                                return `${ctx.dataset.label}: ${suffix}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            font: { size: 9 },
-                            color: '#94a3b8',
-                            callback: val => isPct ? val + '%' : isCurrency ? formatCurrency(val) : val,
-                            mirror: true,
-                            padding: 4,
-                            align: 'end'
-                        },
-                        grid: { color: '#f1f5f9' },
-                        afterFit: (axis) => { axis.width = 55; }
-                    },
-                    x: {
-                        ticks: { font: { size: 10 } },
-                        grid: { display: false },
-                        offset: false
-                    }
-                }
-            }
-        });
-    }
-
-    function evoChartValue(cellData, metricKey) {
-        if (!cellData) return 0;
-        const def = METRICS[metricKey];
-        if (!def) return 0;
-        const v = def.value(cellData);
-        return def.isPct ? Math.round(v) : (def.isCurrency ? Math.round(v) : v);
     }
 
     // ============================
@@ -1976,7 +1883,13 @@ const App = (() => {
                 return;
             }
 
-            // Baby Banking (and other sources): normal import flow
+            // Baby Banking (and other sources): normal import flow.
+            // Admision a test: un pedido a test viene como varias filas (1 por
+            // item). Se agregan por Order Number sumando Quantity ANTES del dedup,
+            // porque la clave (reference, source, price, category) las colapsaria
+            // a una sola y se perderian los items (ver aggregateTestAdmissions).
+            result.records = CSVParser.aggregateTestAdmissions(result.records);
+
             // Deduplicate: skip records that already exist from the SAME source
             UI.showProgress(0, 1, 'Comprobando duplicados...');
             const refs = [...new Set(result.records.map(r => r.reference).filter(Boolean))];
@@ -4028,12 +3941,42 @@ const App = (() => {
         document.getElementById(allCbId).checked = nSel === items.length && items.length > 0;
     }
 
-    // Pone el año de curso junto a un input de semana (De W / a W).
-    function setWeekInputYear(spanId, week) {
-        const el = document.getElementById(spanId);
+    // Lee un par de inputs (semana 1-52 + año de curso) y compone la semana
+    // LINEAL interna. La semana se recorta a 1-52. Devuelve NaN si falta algun dato.
+    function readWeekInput(weekId, yearId) {
+        const w = parseInt(document.getElementById(weekId).value);
+        const y = parseInt(document.getElementById(yearId).value);
+        if (!Number.isFinite(w) || !Number.isFinite(y)) return NaN;
+        const week = Math.min(52, Math.max(1, w));
+        return KPIEngine.helpers.courseWeekToLinear(y, week);
+    }
+
+    // Rellena el par de inputs (semana 1-52 + año) a partir de una semana LINEAL.
+    // Normaliza la vista: una semana fuera de 1-52 se reparte en su año correcto.
+    function setWeekInputs(weekId, yearId, linearWeek) {
+        const { week, year } = KPIEngine.helpers.weekYear(linearWeek);
+        const wEl = document.getElementById(weekId);
+        const yEl = document.getElementById(yearId);
+        if (wEl) wEl.value = week;
+        if (yEl) yEl.value = year;
+    }
+
+    // Muestra/oculta el aviso rojo de "semana inicial posterior a la final"
+    // debajo de la linea de "Datos disponibles".
+    function setWeekRangeError(elId, show) {
+        const el = document.getElementById(elId);
         if (!el) return;
-        const w = parseInt(week);
-        el.textContent = Number.isFinite(w) ? KPIEngine.helpers.weekYear(w).year : '';
+        el.textContent = show ? 'La semana inicial es posterior a la semana final.' : '';
+        el.classList.toggle('hidden', !show);
+    }
+
+    // Persiste estado de vista (rango de semanas, columnas, etc.) SOLO si el
+    // usuario puede escribir (admin). El viewer no persiste — el backend lo
+    // rechazaria con 403 — y un fallo de guardado NUNCA debe bloquear el render.
+    async function saveViewSetting(key, value) {
+        if (typeof Auth !== 'undefined' && !Auth.esAdmin()) return;
+        try { await Database.setSetting(key, value); }
+        catch (e) { console.warn(`No se pudo guardar "${key}":`, e); }
     }
 
     function updateWeekRangeLabel(elId, weekFrom, weekTo) {
@@ -4192,7 +4135,7 @@ const App = (() => {
     }
 
     async function saveDashGeneralColumns() {
-        await Database.setSetting('dgColumns', dgState.columns);
+        await saveViewSetting('dgColumns', dgState.columns);
     }
 
     // The full ordered list used for the picker: active ones first (in their
@@ -4304,7 +4247,7 @@ const App = (() => {
             ddState.groupBy = val;
             // Changing granularity invalidates the auto-top-5 recompute key
             ddState.lastAutoMetric = null;
-            await Database.setSetting('ddGroupBy', val);
+            await saveViewSetting('ddGroupBy', val);
             updateDashDetailControlsUI();
             refreshDashDetail();
         });
@@ -4318,7 +4261,7 @@ const App = (() => {
             // Swapping the axis means the row axis changes too, so the
             // default top-5-by-metric rows need to be recomputed.
             ddState.lastAutoMetric = null;
-            await Database.setSetting('ddAxisMode', ddState.axisMode);
+            await saveViewSetting('ddAxisMode', ddState.axisMode);
             updateDashDetailControlsUI();
             refreshDashDetail();
         });
@@ -4424,25 +4367,25 @@ const App = (() => {
         renderDashGeneralKpiPanel();
 
         const available = await updateAvailableWeeksLabel('dg-available');
-        const fromEl = document.getElementById('dg-week-from');
-        const toEl = document.getElementById('dg-week-to');
-        if (!parseInt(toEl.value) || parseInt(toEl.value) < 1) {
+        let weekFrom = readWeekInput('dg-week-from', 'dg-week-from-year');
+        let weekTo = readWeekInput('dg-week-to', 'dg-week-to-year');
+        if (!Number.isFinite(weekTo)) {
             if (available) {
-                fromEl.value = available.weekMin;
-                toEl.value = available.weekMax;
+                weekFrom = available.weekMin;
+                weekTo = available.weekMax;
             } else {
                 const today = new Date().toISOString().substring(0, 10);
                 const currentWeek = KPIEngine.helpers.businessWeek(today);
-                fromEl.value = Math.max(1, currentWeek - 3);
-                toEl.value = currentWeek;
+                weekFrom = Math.max(1, currentWeek - 3);
+                weekTo = currentWeek;
             }
         }
-        const weekFrom = parseInt(fromEl.value) || 1;
-        const weekTo = parseInt(toEl.value) || weekFrom;
+        if (!Number.isFinite(weekFrom)) weekFrom = weekTo;
 
+        setWeekInputs('dg-week-from', 'dg-week-from-year', weekFrom);
+        setWeekInputs('dg-week-to', 'dg-week-to-year', weekTo);
+        setWeekRangeError('dg-range-error', weekFrom > weekTo);
         updateWeekRangeLabel('dg-week-range', weekFrom, weekTo);
-        setWeekInputYear('dg-week-from-year', weekFrom);
-        setWeekInputYear('dg-week-to-year', weekTo);
 
         const activeCols = (dgState.columns || DG_DEFAULT_COLUMNS).filter(k => isKpiVisible('dashGeneral', k));
         const totalCols = activeCols.length + 1 + 1; // name + metrics + 1 placeholder (Stock)

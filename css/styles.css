@@ -207,8 +207,18 @@ body.role-viewer .admin-only { display: none !important; }
 /* Año (curso) pequeño en las cabeceras de semana de Vista por tienda */
 .th-year { font-size: 0.7em; font-weight: 400; color: var(--color-text-lighter); }
 
-/* Año (curso) junto a los inputs De W / a W */
-.week-input-year { font-size: 0.78rem; font-weight: 600; color: var(--color-text-light); margin: 0 0.4rem 0 -0.2rem; }
+/* Año (curso) editable junto a los inputs De W / a W */
+.week-year-input {
+    width: 62px;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    color: var(--color-text-light);
+    margin: 0 0.4rem 0 0.2rem;
+}
 
 /* ===== MODAL ===== */
 .modal-overlay {
@@ -627,6 +637,50 @@ body.role-viewer .admin-only { display: none !important; }
     padding: 1.5rem 0;
 }
 
+/* ===== COBERTURA v2: rejilla + drill-down ===== */
+.coverage-crumbs { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; font-size: 0.82rem; margin-bottom: 14px; }
+.cov-crumb { color: var(--color-primary); cursor: pointer; padding: 3px 9px; border-radius: 6px; background: var(--color-bg); border: 1px solid var(--color-border); }
+.cov-crumb.current { color: var(--color-text); font-weight: 600; cursor: default; }
+.cov-crumb-sep { color: var(--color-text-lighter); }
+
+.coverage-grid-scroll { overflow-x: auto; }
+.cov-grid { display: grid; gap: 4px; min-width: max-content; }
+.cov-cell {
+    height: 30px; border-radius: 4px; display: flex; align-items: center; justify-content: center;
+    font-size: 0.64rem; color: #fff; font-weight: 600; user-select: none;
+}
+.cov-cell.head { background: transparent; color: var(--color-text-lighter); height: auto; min-height: 24px; line-height: 1.15; padding: 2px 0; text-align: center; }
+.cov-yr { font-size: 0.82em; opacity: 0.6; }
+.cov-cell.rowhead {
+    background: transparent; color: var(--color-text); justify-content: flex-end;
+    padding-right: 10px; font-weight: 500; font-size: 0.76rem; white-space: nowrap;
+}
+.cov-cell.rowhead.click { cursor: pointer; border-radius: 6px; }
+.cov-cell.rowhead.click::after { content: "›"; margin-left: 7px; color: var(--color-text-lighter); font-weight: 700; }
+.cov-grid .cov-cell[data-drill] { cursor: pointer; }
+.cov-cell.miss { background: var(--color-surface); border: 1px dashed var(--color-border-strong, #cdd4da); }
+.cov-cell.miss.alert { background: #fbe3e3; border: 1px solid #ef4444; color: #ef4444; }
+.cov-cell.future { background: var(--color-bg); border: 1px solid var(--color-border); color: var(--color-text-lighter); }
+.cov-cell.day { font-size: 0.6rem; }
+.cov-cell.hl { box-shadow: inset 0 0 0 2px var(--color-primary); }
+.cov-cell.rowhead.hl { color: var(--color-primary); }
+
+.coverage-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 14px; font-size: 0.78rem; color: var(--color-text-light); }
+.coverage-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cov-dot { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.cov-dot.dash { background: var(--color-surface); border: 1px dashed var(--color-border-strong, #cdd4da); }
+.cov-dot.alert { background: #fbe3e3; border: 1px solid #ef4444; }
+.cov-dot.future { background: var(--color-bg); border: 1px solid var(--color-border); }
+.coverage-hint { font-size: 0.76rem; color: var(--color-text-lighter); font-style: italic; margin-top: 10px; }
+
+.coverage-summary-card { margin-top: 18px; }
+.coverage-summary-title { margin: 0 0 12px; font-size: 0.95rem; }
+.coverage-callouts { display: flex; flex-direction: column; gap: 9px; }
+.cov-callout { display: flex; align-items: flex-start; gap: 10px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 10px 12px; font-size: 0.85rem; }
+.cov-callout svg { flex: none; margin-top: 1px; }
+.cov-callout.warn { border-color: #f3c98b; background: #fff8ee; }
+.cov-callout.ok { border-color: #bfe3c6; background: #f3faf4; }
+
 /* ===== HOME: KPI BUTTONS ===== */
 .home-kpi-buttons {
     max-width: 860px;
@@ -930,83 +984,18 @@ body.role-viewer .admin-only { display: none !important; }
     display: none;
 }
 
-/* Evolution chart toggle */
-.evo-chart-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.6rem 1.25rem;
-    border-top: 1px solid var(--color-border-light);
-    position: relative;
-    overflow: visible;
-    z-index: 5;
-}
-
-/* Evolution chart */
-.evo-chart-section {
-    border-top: 1px solid var(--color-border-light);
-}
-
-.evo-chart-bar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    padding: 0.6rem 1.25rem 0;
-}
-
-.evo-chart-controls {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.evo-chart-controls select {
-    padding: 0.25rem 0.5rem;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
+/* Aviso de rango de semanas invalido, debajo de "Datos disponibles" */
+.week-range-error {
     font-size: 0.72rem;
-    background: var(--color-surface);
+    color: var(--color-danger);
+    font-weight: 600;
+    text-align: center;
+    margin-top: 0.15rem;
 }
 
-.evo-chart-info {
-    color: var(--color-text-lighter);
-    cursor: help;
-    display: flex;
-    align-items: center;
-    position: relative;
-}
-
-.evo-chart-info:hover {
-    color: var(--color-primary);
-}
-
-.evo-chart-info:hover::after {
-    content: attr(data-tip);
-    position: absolute;
-    left: 0;
-    top: 100%;
-    margin-top: 0.4rem;
-    background: var(--color-text);
-    color: white;
-    padding: 0.5rem 0.75rem;
-    border-radius: var(--radius-sm);
-    font-size: 0.7rem;
-    line-height: 1.4;
-    white-space: pre-line;
-    width: 260px;
-    z-index: 20;
-    pointer-events: none;
-    box-shadow: var(--shadow-md);
-}
-
-.evo-chart-container {
-    padding: 0.75rem 1rem 1rem;
-    height: 300px;
-    position: relative;
-}
-
-.evo-chart-section.collapsed {
-    display: none;
+/* Pestañas de Vista por tienda (Comparar tiendas / Una tienda) */
+.evo-tabs {
+    margin-right: 0.5rem;
 }
 
 .kpi-panel-title {
@@ -1244,33 +1233,11 @@ body.role-viewer .admin-only { display: none !important; }
     color: var(--color-primary);
 }
 
-/* Selected row for chart */
-.evo-row-selected {
-    background: var(--color-primary-light) !important;
-}
-
-.evo-row-selected td:first-child {
-    color: var(--color-primary);
-}
-
 /* ===== EVOLUTION COMPARE MODE (KPIs-as-rows) ===== */
-#evo-table .col-spark {
-    width: 130px;
-    padding: 0.2rem 0.5rem;
-    text-align: center;
-}
-
 #evo-table .evo-kpi-name {
     font-weight: 600;
     color: var(--color-text);
     white-space: nowrap;
-}
-
-.evo-sparkline {
-    display: inline-block;
-    vertical-align: middle;
-    color: var(--color-primary);
-    overflow: visible;
 }
 
 #evo-table .col-subject-hint {

@@ -4,6 +4,18 @@
  */
 const Changelog = [
     {
+        date: '13/06/2026 (sesion 7 — Stores Edition)',
+        items: [
+            { type: 'new', text: 'COBERTURA rediseñada por completo. En lugar de barras continuas (que ocultaban huecos), una rejilla Semana × Fuente que muestra de un vistazo que semanas tienen datos. Se puede profundizar pulsando: Fuente → desglose por Tienda → calendario por dias. Distingue huecos internos (una semana vacia rodeada de datos = probable olvido) de las semanas aun pendientes al final del rango' },
+            { type: 'new', text: 'Cobertura: resumen accionable que dice que falta importar — huecos internos, semanas TERMINADAS sin subir (la semana en curso no cuenta), y cobertura parcial cuando a una semana le faltan tiendas. No marca como faltantes las semanas anteriores a la apertura de cada tienda' },
+            { type: 'fix', text: 'Items admitidos a test: se contaban de menos (salia practicamente el numero de ordenes en vez de items). Cada pedido a test llega como varias filas (una por item) y la deduplicacion al guardar las colapsaba en una sola. Ahora se agregan por numero de pedido sumando cantidades antes de guardar. OJO: para corregir lo ya cargado hay que re-importar Baby Banking (limpiar la fuente y volver a importar)' },
+            { type: 'fix', text: 'Vista por tienda no mostraba datos a los usuarios de solo lectura (viewer): al refrescar intentaba guardar el rango de semanas —una escritura que el viewer no tiene permitida— y el error abortaba el dibujado de la tabla. Ahora el guardado de estado de vista solo lo hacen los admin y nunca bloquea la vista' },
+            { type: 'change', text: 'Vista por tienda reorganizada en dos pestañas claras: "Comparar tiendas" (tiendas × semanas para un KPI) y "Una tienda" (todos los KPIs × semanas de una tienda concreta). Antes un mismo selector cambiaba el significado de la tabla segun eligieras todas o una, y confundia' },
+            { type: 'change', text: 'Vista por tienda: retirada la columna de mini-graficos (sparklines) y el boton/grafico de evolucion de debajo de la tabla. La evolucion ya se lee por columnas en la propia tabla' },
+            { type: 'change', text: 'Selector de semanas De W / a W ahora editable con año: se escribe la semana (1-52) y el año por separado, de modo que se pueden pedir directamente rangos que cruzan de año (p. ej. W47 2025 → W05 2026). Aviso en rojo si la semana inicial queda por detras de la final' },
+        ]
+    },
+    {
         date: '12/06/2026 (sesion 6 — Stores Edition)',
         items: [
             { type: 'new', text: 'INICIO DE SESION CON GOOGLE (Fase 4b). Ya no se entra "a pelo": cada usuario inicia sesion con su cuenta Google corporativa. Solo se permiten cuentas @webuy.com; cualquier otro dominio queda fuera. Dos roles reales: admin (acceso total) y viewer (solo lectura). Una cuenta nueva entra como viewer automaticamente. Validado en produccion con cuenta admin y cuenta viewer' },

@@ -31,6 +31,41 @@ describe('businessWeek - calendario sabado a viernes', () => {
     });
 });
 
+describe('weekYear / courseWeekToLinear - año de curso (cursos de 52 semanas)', () => {
+    const { weekYear, weekYearLabel, courseWeekToLinear } = KPIEngine.helpers;
+
+    it('W1 lineal es la semana 1 del 2026 (ancla)', () => {
+        expect(weekYear(1)).toEqual({ week: 1, year: 2026 });
+    });
+
+    it('la semana lineal 0 envuelve a W52 2025', () => {
+        expect(weekYear(0)).toEqual({ week: 52, year: 2025 });
+    });
+
+    it('la semana lineal 53 es W1 del 2027', () => {
+        expect(weekYear(53)).toEqual({ week: 1, year: 2027 });
+    });
+
+    it('weekYearLabel formatea "Wxx aaaa" con padding', () => {
+        expect(weekYearLabel(0)).toBe('W52 2025');
+        expect(weekYearLabel(1)).toBe('W01 2026');
+    });
+
+    it('courseWeekToLinear es el inverso exacto de weekYear', () => {
+        expect(courseWeekToLinear(2026, 1)).toBe(1);
+        expect(courseWeekToLinear(2025, 52)).toBe(0);
+        expect(courseWeekToLinear(2025, 47)).toBe(-5);
+        expect(courseWeekToLinear(2027, 1)).toBe(53);
+    });
+
+    it('round-trip weekYear -> courseWeekToLinear conserva la semana lineal', () => {
+        for (let lin = -60; lin <= 120; lin++) {
+            const { week, year } = weekYear(lin);
+            expect(courseWeekToLinear(year, week)).toBe(lin);
+        }
+    });
+});
+
 describe('groupBy', () => {
     const { groupBy } = KPIEngine.helpers;
 
